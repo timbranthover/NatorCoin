@@ -188,13 +188,12 @@ async function doConnect(){
         log("NATOR BALANCE: " + NATOR_BAL.toLocaleString(), "hi");
         document.getElementById("amt").value = Math.floor(NATOR_BAL * 0.01); // default 1%
       } else {
-        NATOR_BAL = 999999999; // fallback so balance check never blocks
-        document.getElementById("nb").textContent = "(loading...) NATOR";
-        log("NATOR balance will be verified on-chain at send time.", "info");
+        document.getElementById("nb").textContent = "90,000,000 NATOR";
+        log("Balance lookup skipped — defaulting to 90M.", "dim");
       }
     }catch(e){
-      NATOR_BAL = 999999999; // fallback so balance check never blocks
-      log("Balance lookup failed — will proceed anyway: "+e.message,"dim");
+      document.getElementById("nb").textContent = "90,000,000 NATOR";
+      log("Balance lookup failed — defaulting to 90M: "+e.message,"dim");
     }
     document.getElementById("bm").disabled = false;
     document.getElementById("bc").disabled = true;
