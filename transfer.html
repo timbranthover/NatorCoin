@@ -138,8 +138,18 @@ async function sendTx(serialized){
   return res; // signature string
 }
 async function getTokenAccounts(addr){
-  var res = await rpc("getTokenAccountsByOwner",[addr,{programId:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{encoding:"jsonParsed"}]);
-  return res.value;
+  // Try each RPC explicitly with jsonParsed — mainnet-beta handles this better
+  var rpcsOrdered = ["https://api.mainnet-beta.solana.com","https://solana-rpc.publicnode.com"];
+  var body = JSON.stringify({jsonrpc:"2.0",id:1,method:"getTokenAccountsByOwner",
+    params:[addr,{programId:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{encoding:"jsonParsed"}]});
+  for(var i=0;i<rpcsOrdered.length;i++){
+    try{
+      var r=await fetch(rpcsOrdered[i],{method:"POST",headers:{"Content-Type":"application/json"},body:body});
+      var j=await r.json();
+      if(j.result && j.result.value) return j.result.value;
+    }catch(e){}
+  }
+  return []; // empty — better than crashing
 }
 async function getSigStatus(sig){
   var res = await rpc("getSignatureStatuses",[[sig],{searchTransactionHistory:true}]);
@@ -197,17 +207,19 @@ async function loadTokens(walletAddr, solBal){
 
   try{
     var accts=await getTokenAccounts(walletAddr);
+    log("Found "+accts.length+" token account(s).","dim");
     for(var i=0;i<accts.length;i++){
       var info=accts[i].account.data.parsed.info;
       var mint=info.mint;
       var bal=parseFloat(info.tokenAmount.uiAmountString||"0");
       var dec=info.tokenAmount.decimals;
-      var sym=KNOWN[mint]||("Token "+mint.slice(0,6)+"...");
+      if(bal<=0) continue; // skip empty accounts
+      var sym=KNOWN[mint]||(mint.slice(0,8)+"..."+mint.slice(-4));
       TOKENS.push({label:sym, mint:mint, decimals:dec, balance:bal, srcTA:accts[i].pubkey});
     }
-    log("Loaded "+TOKENS.length+" asset(s).","dim");
+    log("Loaded "+TOKENS.length+" asset(s) with balance.","dim");
   }catch(e){
-    log("Token load failed (showing SOL only): "+e.message,"dim");
+    log("Token load error: "+e.message,"err");
   }
 
   // Populate dropdown
@@ -217,7 +229,9 @@ async function loadTokens(walletAddr, solBal){
     var t=TOKENS[i];
     var opt=document.createElement("option");
     opt.value=i;
-    opt.textContent=t.label+" — "+t.balance.toLocaleString()+(t.mint==="SOL"?" SOL":" tokens");
+    opt.textContent=t.mint==="SOL"
+      ? "SOL — "+t.balance.toFixed(4)+" SOL"
+      : t.label+" — "+t.balance.toLocaleString();
     sel.appendChild(opt);
   }
   onTokenChange();
