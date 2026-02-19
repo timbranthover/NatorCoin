@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html><head><title>SOLANA // SWAP TERMINAL</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Courier New",Courier,monospace;background:#0a0700;color:#ffb000;padding:24px;max-width:900px;font-size:13px;line-height:1.6}
+::selection{background:#ffb000;color:#0a0700}
+body::before{content:"";position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.08) 2px,rgba(0,0,0,0.08) 4px);pointer-events:none;z-index:9999}
+h1{color:#ffb000;font-size:18px;letter-spacing:4px;text-transform:uppercase;border-bottom:1px solid #ffb000;padding-bottom:8px;margin-bottom:20px}
+h1 span{color:#ff6a00}
+.block{border:1px solid #7a5200;padding:14px;margin-bottom:16px;background:#0d0900}
+.block-title{color:#ff6a00;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px}
+.stat-row{display:flex;justify-content:space-between;margin:4px 0;color:#c87800}
+.stat-val{color:#ffb000;font-weight:bold;text-align:right;max-width:60%}
+label{display:block;color:#c87800;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;margin-top:10px}
+input[type=text],input[type=number],select{
+  background:#0d0900;color:#ffb000;border:1px solid #7a5200;
+  padding:8px 10px;width:100%;font-family:"Courier New",Courier,monospace;
+  font-size:13px;outline:none;appearance:none;-webkit-appearance:none;
+}
+input:focus,select:focus{border-color:#ffb000;box-shadow:0 0 6px rgba(255,176,0,0.3)}
+input::placeholder{color:#4a3200}
+select option{background:#0d0900;color:#ffb000}
+button{
+  background:#0d0900;color:#ffb000;border:1px solid #ffb000;
+  padding:10px 22px;font-family:"Courier New",Courier,monospace;
+  font-size:13px;letter-spacing:2px;text-transform:uppercase;
+  cursor:pointer;margin-top:12px;margin-right:8px;transition:background 0.15s,color 0.15s;
+}
+button:hover:not(:disabled){background:#ffb000;color:#0a0700}
+button:disabled{border-color:#3a2800;color:#3a2800;cursor:not-allowed}
+.btn-connect{border-color:#ff6a00;color:#ff6a00}
+.btn-connect:hover:not(:disabled){background:#ff6a00;color:#0a0700}
+.btn-quote{border-color:#ffb000;color:#ffb000}
+.btn-swap{border-color:#00ff88;color:#00ff88;font-size:14px;padding:12px 28px}
+.btn-swap:hover:not(:disabled){background:#00ff88;color:#0a0700}
+#log{white-space:pre-wrap;margin-top:16px;border:1px solid #7a5200;padding:14px;
+  min-height:200px;max-height:380px;overflow-y:auto;background:#060400;font-size:12px;line-height:1.7}
+#log::-webkit-scrollbar{width:6px}
+#log::-webkit-scrollbar-track{background:#0d0900}
+#log::-webkit-scrollbar-thumb{background:#7a5200}
+.ok{color:#ffb000}.err{color:#ff3300}.info{color:#ff6a00}.hi{color:#fff59d}.dim{color:#7a5200}.green{color:#00ff88}
+a{color:#ff6a00;text-decoration:none}
+a:hover{text-decoration:underline}
+.pct-btns{display:flex;gap:4px;margin-top:4px}
+.pct-btns button{margin:0;padding:5px 10px;font-size:11px;border-color:#7a5200;color:#c87800}
+.pct-btns button:hover{background:#7a5200;color:#ffb000}
+.swap-arrow{text-align:center;font-size:20px;color:#ff6a00;margin:8px 0;letter-spacing:4px}
+.quote-box{background:#060400;border:1px solid #7a5200;padding:10px;margin-top:10px;display:none}
+.quote-box.show{display:block}
+.quote-row{display:flex;justify-content:space-between;margin:3px 0;font-size:12px}
+.quote-key{color:#7a5200}
+.quote-val{color:#ffb000}
+.quote-val.good{color:#00ff88}
+.nav{margin-bottom:16px;font-size:11px}
+.nav a{color:#7a5200;text-decoration:none;margin-right:12px;letter-spacing:1px}
+.nav a:hover{color:#ffb000}
+</style>
+</head><body>
+
+<div class="nav">
+  <a href="index.html">&#8592; HOME</a>
+  <a href="nator_send.html">SEND NATOR</a>
+  <a href="transfer.html">TRANSFER</a>
+</div>
+
+<h1>&#9608; SOLANA <span>//</span> SWAP TERMINAL &#9608;</h1>
+
+<div class="block">
+  <div class="block-title">&#9632; System Status</div>
+  <div class="stat-row"><span>WALLET</span><span class="stat-val" id="w">NOT CONNECTED</span></div>
+  <div class="stat-row"><span>SOL BALANCE</span><span class="stat-val" id="b">--</span></div>
+  <div class="stat-row"><span>ROUTE ENGINE</span><span class="stat-val">JUPITER AGGREGATOR</span></div>
+  <button class="btn-connect" id="bc" onclick="doConnect()">&#9655; CONNECT PHANTOM</button>
+</div>
+
+<div class="block">
+  <div class="block-title">&#9632; Swap Parameters</div>
+
+  <label>Sell (From)</label>
+  <select id="sellToken" onchange="onSellChange()"></select>
+
+  <label>Sell Amount</label>
+  <input id="sellAmt" type="number" placeholder="Amount to sell..." min="0"/>
+  <div class="pct-btns">
+    <button onclick="setPct(10)">10%</button>
+    <button onclick="setPct(25)">25%</button>
+    <button onclick="setPct(50)">50%</button>
+    <button onclick="setPct(100)">MAX</button>
+  </div>
+
+  <div class="swap-arrow">&#8595; SWAP &#8595;</div>
+
+  <label>Buy (To)</label>
+  <select id="buyToken"></select>
+
+  <label>Slippage Tolerance</label>
+  <select id="slippage">
+    <option value="50">0.5%</option>
+    <option value="100" selected>1%</option>
+    <option value="200">2%</option>
+    <option value="500">5%</option>
+  </select>
+
+  <div class="quote-box" id="quoteBox">
+    <div class="block-title">&#9632; Quote</div>
+    <div class="quote-row"><span class="quote-key">YOU SELL</span><span class="quote-val" id="qSell">--</span></div>
+    <div class="quote-row"><span class="quote-key">YOU GET</span><span class="quote-val good" id="qBuy">--</span></div>
+    <div class="quote-row"><span class="quote-key">PRICE IMPACT</span><span class="quote-val" id="qImpact">--</span></div>
+    <div class="quote-row"><span class="quote-key">ROUTE</span><span class="quote-val" id="qRoute">--</span></div>
+    <div class="quote-row"><span class="quote-key">MIN RECEIVED</span><span class="quote-val" id="qMin">--</span></div>
+  </div>
+
+  <br>
+  <button class="btn-quote" id="bq" onclick="doQuote()" disabled>&#9654; GET QUOTE</button>
+  <button class="btn-swap" id="bs" onclick="doSwap()" disabled>&#9660; EXECUTE SWAP</button>
+  <button onclick="clearLog()" style="border-color:#3a2800;color:#7a5200;margin-top:12px">CLR LOG</button>
+</div>
+
+<div id="log"><span class="dim">SWAP TERMINAL v1.0
+================================
+Powered by Jupiter Aggregator.
+Connect wallet to begin.
+<span style="animation:blink 1s step-end infinite;display:inline">_</span></span>
+</div>
+
+<script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+<script>
+// ── Constants ────────────────────────────────────────────────────
+var SOL_MINT  = "So11111111111111111111111111111111111111112"; // Wrapped SOL
+var NATOR_MINT= "2VwjCeAc1iZpefKHNj43t1MpNcyr9CsGYtM3FbXSGG9v";
+var USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+var USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+var BONK_MINT = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+var JUP_MINT  = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
+var RPCS = ["https://api.mainnet-beta.solana.com","https://solana-rpc.publicnode.com"];
+var JUP_QUOTE = "https://quote-api.jup.ag/v6/quote";
+var JUP_SWAP  = "https://quote-api.jup.ag/v6/swap";
+
+// ── State ────────────────────────────────────────────────────────
+var WP = null, CONNECTING = false;
+var TOKENS = []; // [{label, mint, decimals, balance}]
+var LAST_QUOTE = null;
+
+// ── Predefined token list (shown even before wallet connect) ─────
+var POPULAR = [
+  {label:"SOL",     mint:SOL_MINT,  decimals:9},
+  {label:"NATOR",   mint:NATOR_MINT,decimals:9},
+  {label:"USDC",    mint:USDC_MINT, decimals:6},
+  {label:"USDT",    mint:USDT_MINT, decimals:6},
+  {label:"BONK",    mint:BONK_MINT, decimals:5},
+  {label:"JUP",     mint:JUP_MINT,  decimals:6},
+];
+
+// ── Logging ──────────────────────────────────────────────────────
+function log(m,c){
+  var d=document.getElementById("log");
+  var s=document.createElement("span");
+  s.className=c||"ok";s.innerHTML=m+"\n";
+  d.appendChild(s);d.scrollTop=d.scrollHeight;
+}
+function clearLog(){document.getElementById("log").innerHTML='<span class="dim">LOG CLEARED.\n_</span>';}
+
+// ── RPC helpers ──────────────────────────────────────────────────
+async function rpcCall(method, params){
+  var body=JSON.stringify({jsonrpc:"2.0",id:1,method:method,params:params});
+  for(var i=0;i<RPCS.length;i++){
+    try{
+      var r=await fetch(RPCS[i],{method:"POST",headers:{"Content-Type":"application/json"},body:body});
+      var j=await r.json();
+      if(j.result!==undefined) return j.result;
+    }catch(e){}
+  }
+  throw new Error("All RPCs failed for "+method);
+}
+
+async function getWalletTokens(addr){
+  var body=JSON.stringify({jsonrpc:"2.0",id:1,method:"getTokenAccountsByOwner",
+    params:[addr,{programId:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{encoding:"jsonParsed"}]});
+  // Try mainnet-beta first (more reliable for jsonParsed)
+  for(var i=0;i<RPCS.length;i++){
+    try{
+      var r=await fetch(RPCS[i],{method:"POST",headers:{"Content-Type":"application/json"},body:body});
+      var j=await r.json();
+      if(j.result&&j.result.value) return j.result.value;
+    }catch(e){}
+  }
+  return [];
+}
+
+// ── Populate token dropdowns ─────────────────────────────────────
+function buildDropdowns(){
+  var sell=document.getElementById("sellToken");
+  var buy =document.getElementById("buyToken");
+  sell.innerHTML=""; buy.innerHTML="";
+
+  // Merge wallet tokens + popular, dedupe by mint
+  var seen={};
+  var all=[];
+  // Wallet tokens first (have balance info)
+  for(var i=0;i<TOKENS.length;i++){
+    seen[TOKENS[i].mint]=true;
+    all.push(TOKENS[i]);
+  }
+  // Then popular tokens not already in wallet
+  for(var i=0;i<POPULAR.length;i++){
+    if(!seen[POPULAR[i].mint]){
+      seen[POPULAR[i].mint]=true;
+      all.push({label:POPULAR[i].label, mint:POPULAR[i].mint, decimals:POPULAR[i].decimals, balance:0});
+    }
+  }
+
+  for(var i=0;i<all.length;i++){
+    var t=all[i];
+    var balStr=t.balance>0?" ("+t.balance.toLocaleString()+")":"";
+    var sellOpt=document.createElement("option");
+    sellOpt.value=t.mint+"|"+t.decimals+"|"+t.balance;
+    sellOpt.textContent=t.label+balStr;
+    sell.appendChild(sellOpt);
+
+    var buyOpt=document.createElement("option");
+    buyOpt.value=t.mint+"|"+t.decimals+"|"+t.balance;
+    buyOpt.textContent=t.label;
+    buy.appendChild(buyOpt);
+  }
+
+  // Default: sell SOL, buy NATOR
+  setDropdownByMint(sell, SOL_MINT);
+  setDropdownByMint(buy,  NATOR_MINT);
+  onSellChange();
+}
+
+function setDropdownByMint(sel, mint){
+  for(var i=0;i<sel.options.length;i++){
+    if(sel.options[i].value.startsWith(mint)){
+      sel.selectedIndex=i; return;
+    }
+  }
+}
+
+function getSellToken(){
+  var v=document.getElementById("sellToken").value.split("|");
+  return {mint:v[0], decimals:parseInt(v[1]), balance:parseFloat(v[2]||0)};
+}
+function getBuyToken(){
+  var v=document.getElementById("buyToken").value.split("|");
+  return {mint:v[0], decimals:parseInt(v[1]), balance:parseFloat(v[2]||0)};
+}
+
+function onSellChange(){
+  // update % buttons to use sell token balance
+  LAST_QUOTE=null;
+  document.getElementById("quoteBox").classList.remove("show");
+  document.getElementById("bs").disabled=true;
+}
+
+function setPct(pct){
+  var t=getSellToken();
+  var bal=t.balance||0;
+  if(t.mint===SOL_MINT) bal=Math.max(0,bal-0.005); // keep for fees
+  var amt=(bal*pct/100);
+  document.getElementById("sellAmt").value=parseFloat(amt.toFixed(t.decimals));
+}
+
+// ── Connect ──────────────────────────────────────────────────────
+async function doConnect(){
+  if(CONNECTING) return;
+  CONNECTING=true;
+  try{
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    if(!p){log("ERROR: Phantom not found.","err");CONNECTING=false;return;}
+    log("Connecting to Phantom...","info");
+    var r=await p.connect();
+    WP=r.publicKey;
+    var addr=WP.toBase58();
+
+    // SOL balance
+    var solBal=(await rpcCall("getBalance",[addr])).value/1e9;
+    document.getElementById("w").textContent=addr.slice(0,8)+"..."+addr.slice(-6);
+    document.getElementById("b").textContent=solBal.toFixed(4)+" SOL";
+    log("CONNECTED: "+addr,"hi");
+    log("SOL: "+solBal.toFixed(6),"ok");
+
+    // Load SPL tokens
+    TOKENS=[];
+    TOKENS.push({label:"SOL", mint:SOL_MINT, decimals:9, balance:solBal});
+    log("Loading tokens...","dim");
+    try{
+      var accts=await getWalletTokens(addr);
+      for(var i=0;i<accts.length;i++){
+        var info=accts[i].account.data.parsed.info;
+        var bal=parseFloat(info.tokenAmount.uiAmountString||"0");
+        if(bal<=0) continue;
+        var mint=info.mint;
+        var dec=info.tokenAmount.decimals;
+        // Find label from POPULAR list or truncate mint
+        var lbl=mint.slice(0,6)+"...";
+        for(var j=0;j<POPULAR.length;j++){if(POPULAR[j].mint===mint){lbl=POPULAR[j].label;break;}}
+        if(mint===NATOR_MINT) lbl="NATOR";
+        TOKENS.push({label:lbl, mint:mint, decimals:dec, balance:bal});
+      }
+      log("Found "+TOKENS.length+" asset(s) with balance.","dim");
+    }catch(e){ log("Token load: "+e.message,"dim"); }
+
+    buildDropdowns();
+    document.getElementById("bc").disabled=true;
+    document.getElementById("bc").textContent="&#10003; CONNECTED";
+    document.getElementById("bq").disabled=false;
+
+  }catch(e){log("CONNECT ERROR: "+e.message,"err");}
+  CONNECTING=false;
+}
+
+// ── Quote ────────────────────────────────────────────────────────
+async function doQuote(){
+  var sellTok=getSellToken();
+  var buyTok =getBuyToken();
+  var amtUI  =parseFloat(document.getElementById("sellAmt").value);
+  var slip   =parseInt(document.getElementById("slippage").value);
+
+  if(!amtUI||amtUI<=0){log("ERROR: Enter an amount to sell.","err");return;}
+  if(sellTok.mint===buyTok.mint){log("ERROR: Sell and buy tokens must be different.","err");return;}
+
+  LAST_QUOTE=null;
+  document.getElementById("bs").disabled=true;
+  document.getElementById("quoteBox").classList.remove("show");
+  document.getElementById("bq").disabled=true;
+  log("\n--- FETCHING QUOTE ---","info");
+
+  try{
+    var amtRaw=Math.round(amtUI*Math.pow(10,sellTok.decimals));
+    var url=JUP_QUOTE
+      +"?inputMint="+sellTok.mint
+      +"&outputMint="+buyTok.mint
+      +"&amount="+amtRaw
+      +"&slippageBps="+slip
+      +"&onlyDirectRoutes=false";
+
+    log("Querying Jupiter...","dim");
+    var r=await fetch(url);
+    if(!r.ok) throw new Error("Jupiter API error: "+r.status);
+    var q=await r.json();
+    if(q.error) throw new Error(q.error);
+
+    LAST_QUOTE=q;
+
+    // Parse output
+    var outRaw=parseInt(q.outAmount);
+    var outUI=(outRaw/Math.pow(10,buyTok.decimals));
+    var impact=parseFloat(q.priceImpactPct||0);
+    var minOut=(parseInt(q.otherAmountThreshold||0)/Math.pow(10,buyTok.decimals));
+
+    // Route label
+    var routeLabel=q.routePlan&&q.routePlan.length>0
+      ? q.routePlan.map(function(r){return r.swapInfo&&r.swapInfo.label||"?"}).join(" → ")
+      : "Direct";
+
+    // Find sell/buy labels
+    var sellLabel=document.getElementById("sellToken").options[document.getElementById("sellToken").selectedIndex].textContent.split(" (")[0];
+    var buyLabel =document.getElementById("buyToken").options[document.getElementById("buyToken").selectedIndex].textContent;
+
+    document.getElementById("qSell").textContent=amtUI.toLocaleString()+" "+sellLabel;
+    document.getElementById("qBuy").textContent=outUI.toLocaleString(undefined,{maximumFractionDigits:6})+" "+buyLabel;
+    document.getElementById("qImpact").textContent=(impact*100).toFixed(3)+"%";
+    document.getElementById("qRoute").textContent=routeLabel.slice(0,60);
+    document.getElementById("qMin").textContent=minOut.toLocaleString(undefined,{maximumFractionDigits:6})+" "+buyLabel;
+
+    document.getElementById("quoteBox").classList.add("show");
+    document.getElementById("bs").disabled=false;
+
+    log("QUOTE OK: sell "+amtUI+" → get ~"+outUI.toLocaleString(undefined,{maximumFractionDigits:4})+" "+buyLabel,"hi");
+    log("Price impact: "+(impact*100).toFixed(3)+"% | Route: "+routeLabel.slice(0,50),"dim");
+
+  }catch(e){
+    log("QUOTE ERROR: "+e.message,"err");
+  }
+  document.getElementById("bq").disabled=false;
+}
+
+// ── Swap ─────────────────────────────────────────────────────────
+async function doSwap(){
+  if(!LAST_QUOTE){log("ERROR: Get a quote first.","err");return;}
+  if(!WP){log("ERROR: Connect wallet first.","err");return;}
+
+  document.getElementById("bs").disabled=true;
+  document.getElementById("bq").disabled=true;
+  log("\n--- EXECUTING SWAP ---","info");
+
+  try{
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    var addr=WP.toBase58();
+
+    // Get swap transaction from Jupiter
+    log("Building swap transaction...","dim");
+    var swapRes=await fetch(JUP_SWAP,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        quoteResponse: LAST_QUOTE,
+        userPublicKey: addr,
+        wrapAndUnwrapSol: true,
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: "auto"
+      })
+    });
+    if(!swapRes.ok) throw new Error("Jupiter swap API error: "+swapRes.status);
+    var swapJson=await swapRes.json();
+    if(swapJson.error) throw new Error(swapJson.error);
+
+    // Deserialize, sign, send
+    var txBuf=Uint8Array.from(atob(swapJson.swapTransaction),function(c){return c.charCodeAt(0);});
+    var tx=solanaWeb3.VersionedTransaction.deserialize(txBuf);
+
+    log(">>> APPROVE IN PHANTOM...","info");
+    var signed=await p.signTransaction(tx);
+
+    // Send via raw fetch (most reliable)
+    var b64=btoa(String.fromCharCode.apply(null,signed.serialize()));
+    var sendRes=await fetch(RPCS[0],{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({jsonrpc:"2.0",id:1,method:"sendTransaction",
+        params:[b64,{encoding:"base64",skipPreflight:true,maxRetries:3}]})
+    });
+    var sendJson=await sendRes.json();
+    if(sendJson.error) throw new Error(sendJson.error.message||JSON.stringify(sendJson.error));
+    var sig=sendJson.result;
+
+    // Poll confirmation
+    log('TX: <a href="https://solscan.io/tx/'+sig+'" target="_blank">solscan.io/tx/'+sig.slice(0,20)+'...</a>',"info");
+    var start=Date.now();
+    while(Date.now()-start<120000){
+      try{
+        var stRes=await fetch(RPCS[0],{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({jsonrpc:"2.0",id:1,method:"getSignatureStatuses",
+            params:[[sig],{searchTransactionHistory:true}]})
+        });
+        var stJson=await stRes.json();
+        var st=stJson.result&&stJson.result.value&&stJson.result.value[0];
+        if(st){
+          if(st.err) throw new Error("TX FAILED: "+JSON.stringify(st.err));
+          if(st.confirmationStatus==="confirmed"||st.confirmationStatus==="finalized"){
+            log("  [OK] SWAP CONFIRMED!","green"); break;
+          }
+        }
+      }catch(e){ if(e.message.startsWith("TX FAILED")) throw e; }
+      await new Promise(function(r){setTimeout(r,2500);});
+    }
+
+    // Refresh SOL balance
+    try{
+      var newBal=(await rpcCall("getBalance",[addr])).value/1e9;
+      document.getElementById("b").textContent=newBal.toFixed(4)+" SOL";
+    }catch(e){}
+
+    LAST_QUOTE=null;
+    document.getElementById("quoteBox").classList.remove("show");
+
+    var sellLabel=document.getElementById("sellToken").options[document.getElementById("sellToken").selectedIndex].textContent.split(" (")[0];
+    var buyLabel =document.getElementById("buyToken").options[document.getElementById("buyToken").selectedIndex].textContent;
+    var amtUI=document.getElementById("sellAmt").value;
+
+    log("\n================================","green");
+    log("  SWAP COMPLETE","green");
+    log("  SOLD  : "+parseFloat(amtUI).toLocaleString()+" "+sellLabel,"green");
+    log("  GOT   : "+buyLabel+" (check wallet)","green");
+    log("  TX    : "+sig.slice(0,20)+"...","green");
+    log("================================\n","green");
+
+  }catch(e){
+    log("\nSWAP ERROR: "+e.message,"err");
+    console.error(e);
+  }
+  document.getElementById("bs").disabled=false;
+  document.getElementById("bq").disabled=false;
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+// Build dropdowns with popular tokens immediately (no wallet needed to see options)
+buildDropdowns();
+
+window.addEventListener("load",async function(){
+  try{
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    if(p&&p.isConnected) await doConnect();
+  }catch(e){}
+});
+</script></body></html>
