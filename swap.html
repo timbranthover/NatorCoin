@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html><head><title>SOLANA // SWAP TERMINAL</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Courier New",Courier,monospace;background:#0a0700;color:#ffb000;padding:24px;max-width:900px;font-size:13px;line-height:1.6}
@@ -19,7 +20,13 @@ input[type=text],input[type=number],select{
 }
 input:focus,select:focus{border-color:#ffb000;box-shadow:0 0 6px rgba(255,176,0,0.3)}
 input::placeholder{color:#4a3200}
+/* Amber dropdown — kill OS blue hover */
+select{cursor:pointer;color-scheme:dark}
 select option{background:#0d0900;color:#ffb000}
+select option:hover,select option:focus,select option:checked{
+  background:#3a2000;color:#ffb000;
+  background:linear-gradient(#3a2000,#3a2000); /* webkit hack */
+}
 button{
   background:#0d0900;color:#ffb000;border:1px solid #ffb000;
   padding:10px 22px;font-family:"Courier New",Courier,monospace;
@@ -57,15 +64,37 @@ button:disabled{border-color:#3a2800;color:#3a2800;cursor:not-allowed}
 .ok{color:#ffb000}.err{color:#ff3300}.info{color:#ff6a00}.hi{color:#fff59d}.dim{color:#7a5200}.green{color:#00ff88}
 a{color:#ff6a00;text-decoration:none}
 a:hover{text-decoration:underline}
-.home-btn{position:fixed;top:16px;right:16px;background:#0d0900;border:1px solid #7a5200;color:#c87800;font-family:"Courier New",Courier,monospace;font-size:11px;letter-spacing:2px;padding:5px 12px;cursor:pointer;text-decoration:none;z-index:10000;text-transform:uppercase}
-.home-btn:hover{background:#7a5200;color:#ffb000;border-color:#ffb000}
-.nav{margin-bottom:16px;font-size:11px}
-.nav a{color:#7a5200;text-decoration:none;margin-right:14px;letter-spacing:1px;text-transform:uppercase}
-.nav a:hover{color:#ffb000}
+/* Nav — HOME leftmost */
+.nav{margin-bottom:16px;font-size:11px;display:flex;align-items:center;gap:0}
+.nav a{color:#7a5200;text-decoration:none;letter-spacing:1px;text-transform:uppercase;
+  background:#0d0900;border:1px solid #3a2000;padding:4px 10px;margin-right:4px;transition:color 0.1s,background 0.1s}
+.nav a:hover{color:#ffb000;background:#1a0e00;border-color:#7a5200}
+.nav a.nav-home{color:#c87800;border-color:#7a5200}
+.nav a.nav-home:hover{color:#ffb000;background:#2a1500;border-color:#ffb000}
+
+/* ── Mobile responsive ────────────────────────────────── */
+@media(max-width:600px){
+  body{padding:14px 12px;font-size:14px}
+  h1{font-size:15px;letter-spacing:2px}
+  .block{padding:12px 10px}
+  input[type=text],input[type=number],select{font-size:14px;padding:10px 10px}
+  button{font-size:13px;padding:11px 16px;letter-spacing:1px}
+  .btn-swap{font-size:14px;padding:13px 20px}
+  .pct-btns button{font-size:12px;padding:8px 10px}
+  .pct-btns{gap:6px}
+  .qrow{flex-direction:column;gap:2px}
+  .qkey{font-size:11px}
+  .qval{font-size:13px}
+  .stat-row{flex-wrap:wrap}
+  .stat-val{min-width:0;word-break:break-all;font-size:12px}
+  #log{font-size:12px;min-height:140px;max-height:260px}
+  .nav a{padding:5px 9px;font-size:11px}
+  .swap-arrow{font-size:22px;margin:14px 0}
+}
 </style></head><body>
 
-<a href="index.html" class="home-btn">&#8592; HOME</a>
 <div class="nav">
+  <a href="index.html" class="nav-home">&#8592; HOME</a>
   <a href="nator_send.html">Send NATOR</a>
   <a href="transfer.html">Transfer</a>
 </div>
@@ -132,7 +161,7 @@ a:hover{text-decoration:underline}
   </div>
 </div>
 
-<div id="log"><span class="dim">SWAP TERMINAL v2.0
+<div id="log"><span class="dim">SWAP TERMINAL v2.1
 ================================
 Powered by Jupiter Lite API (lite-api.jup.ag)
 Connect wallet → select tokens → GET QUOTE → EXECUTE SWAP
@@ -150,7 +179,6 @@ var SOL_MINT  = "So11111111111111111111111111111111111111112";
 var USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 var NATOR_MINT= "2VwjCeAc1iZpefKHNj43t1MpNcyr9CsGYtM3FbXSGG9v";
 
-// Popular tokens always shown (user can always pick any token by searching)
 var DEFAULTS = [
   {label:"SOL",   mint:SOL_MINT,  dec:9},
   {label:"USDC",  mint:USDC_MINT, dec:6},
@@ -159,7 +187,9 @@ var DEFAULTS = [
 
 // ── State ──────────────────────────────────────────────────────────
 var WP=null, CONNECTING=false, LAST_QUOTE=null;
-var WALLET_TOKENS=[]; // tokens in connected wallet with balance
+var WALLET_TOKENS=[];
+// Blockhash cache (valid ~60s on Solana)
+var BH_CACHE={hash:null,ts:0};
 
 // ── Helpers ────────────────────────────────────────────────────────
 function log(m,c){
@@ -187,17 +217,37 @@ async function rpcFetch(method,params){
   throw new Error("All RPCs failed for "+method);
 }
 
+// Warm up Jupiter API connection immediately on page load (no-op fetch to open TCP/TLS)
+function warmJupiter(){
+  // Fire-and-forget: tiny preflight quote (1 lamport SOL→USDC) to establish connection
+  fetch(JUP_QUOTE+"?inputMint="+SOL_MINT+"&outputMint="+USDC_MINT+"&amount=1&slippageBps=50&swapMode=ExactIn")
+    .catch(function(){});
+}
+
+// Pre-cache blockhash so it's ready when user clicks Execute
+async function refreshBlockhash(){
+  try{
+    var res=await rpcFetch("getLatestBlockhash",[{commitment:"confirmed"}]);
+    BH_CACHE.hash=res.value.blockhash;
+    BH_CACHE.ts=Date.now();
+  }catch(e){}
+}
+
+async function getBlockhash(){
+  // Use cache if less than 25s old (blocks are ~400ms, valid for ~60s)
+  if(BH_CACHE.hash && Date.now()-BH_CACHE.ts<25000) return BH_CACHE.hash;
+  await refreshBlockhash();
+  return BH_CACHE.hash;
+}
+
 // ── Dropdowns ──────────────────────────────────────────────────────
 function buildDropdowns(){
-  // Merge wallet tokens + defaults, dedup by mint
   var seen={};
   var all=[];
-  // Wallet tokens first (have real balances)
   for(var i=0;i<WALLET_TOKENS.length;i++){
     seen[WALLET_TOKENS[i].mint]=true;
     all.push(WALLET_TOKENS[i]);
   }
-  // Then defaults not already in wallet
   for(var i=0;i<DEFAULTS.length;i++){
     if(!seen[DEFAULTS[i].mint]){
       all.push({label:DEFAULTS[i].label,mint:DEFAULTS[i].mint,dec:DEFAULTS[i].dec,balance:0});
@@ -221,7 +271,6 @@ function buildDropdowns(){
     bo.textContent=t.label;
     buySel.appendChild(bo);
   }
-  // Default: sell SOL, buy USDC
   setByMint(sellSel, SOL_MINT);
   setByMint(buySel,  USDC_MINT);
   clearQuote();
@@ -244,7 +293,7 @@ function onSellChange(){ clearQuote(); }
 function setPct(pct){
   var t=getTok("sellTok");
   var bal=t.balance||0;
-  if(t.mint===SOL_MINT) bal=Math.max(0,bal-0.005); // reserve fees
+  if(t.mint===SOL_MINT) bal=Math.max(0,bal-0.005);
   document.getElementById("sellAmt").value=parseFloat((bal*pct/100).toFixed(t.dec));
 }
 
@@ -259,45 +308,58 @@ async function doConnect(){
     var r=await p.connect();
     WP=r.publicKey;
     var addr=WP.toBase58();
-    var solBal=(await rpcFetch("getBalance",[addr])).value/1e9;
+
+    // Parallel: SOL balance + token accounts + blockhash prefetch
+    log("Loading balances...","dim");
+    var [solResult, tokenResult] = await Promise.allSettled([
+      rpcFetch("getBalance",[addr]),
+      (async function(){
+        var body=JSON.stringify({jsonrpc:"2.0",id:1,method:"getTokenAccountsByOwner",
+          params:[addr,{programId:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{encoding:"jsonParsed"}]});
+        for(var ri=0;ri<RPCS.length;ri++){
+          try{
+            var res=await fetch(RPCS[ri],{method:"POST",headers:{"Content-Type":"application/json"},body:body});
+            var jj=await res.json();
+            if(jj.result&&jj.result.value) return jj.result.value;
+          }catch(e2){}
+        }
+        return [];
+      })(),
+      refreshBlockhash() // pre-warm blockhash cache
+    ]);
+
+    var solBal = solResult.status==="fulfilled" ? solResult.value.value/1e9 : 0;
     document.getElementById("w").textContent=addr.slice(0,8)+"..."+addr.slice(-6);
     document.getElementById("b").textContent=solBal.toFixed(4)+" SOL";
     log("CONNECTED: "+addr,"hi");
     log("SOL: "+solBal.toFixed(6),"ok");
 
-    // Load wallet tokens
+    // Build wallet tokens list
     WALLET_TOKENS=[];
     WALLET_TOKENS.push({label:"SOL",mint:SOL_MINT,dec:9,balance:solBal});
-    try{
-      var body=JSON.stringify({jsonrpc:"2.0",id:1,method:"getTokenAccountsByOwner",
-        params:[addr,{programId:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{encoding:"jsonParsed"}]});
-      for(var ri=0;ri<RPCS.length;ri++){
-        try{
-          var res=await fetch(RPCS[ri],{method:"POST",headers:{"Content-Type":"application/json"},body:body});
-          var jj=await res.json();
-          if(jj.result&&jj.result.value){
-            var accts=jj.result.value;
-            log("Found "+accts.length+" token account(s).","dim");
-            for(var i=0;i<accts.length;i++){
-              var info=accts[i].account.data.parsed.info;
-              var bal=parseFloat(info.tokenAmount.uiAmountString||"0");
-              if(bal<=0) continue;
-              var mint=info.mint;
-              var lbl=mint.slice(0,6)+"...";
-              for(var d=0;d<DEFAULTS.length;d++){if(DEFAULTS[d].mint===mint){lbl=DEFAULTS[d].label;break;}}
-              WALLET_TOKENS.push({label:lbl,mint:mint,dec:info.tokenAmount.decimals,balance:bal});
-            }
-            break;
-          }
-        }catch(e2){}
+    if(tokenResult.status==="fulfilled"){
+      var accts=tokenResult.value;
+      log("Found "+accts.length+" token account(s).","dim");
+      for(var i=0;i<accts.length;i++){
+        var info=accts[i].account.data.parsed.info;
+        var bal=parseFloat(info.tokenAmount.uiAmountString||"0");
+        if(bal<=0) continue;
+        var mint=info.mint;
+        var lbl=mint.slice(0,6)+"...";
+        for(var d=0;d<DEFAULTS.length;d++){if(DEFAULTS[d].mint===mint){lbl=DEFAULTS[d].label;break;}}
+        WALLET_TOKENS.push({label:lbl,mint:mint,dec:info.tokenAmount.decimals,balance:bal});
       }
-    }catch(e){log("Token load: "+e.message,"dim");}
+    }
 
     buildDropdowns();
     document.getElementById("bc").disabled=true;
     document.getElementById("bc").textContent="&#10003; CONNECTED";
     document.getElementById("bq").disabled=false;
-    log("Ready to swap. Select tokens and click GET QUOTE.","dim");
+    log("Ready. Select tokens → GET QUOTE.","dim");
+
+    // Keep blockhash fresh every 20s while page is open
+    setInterval(refreshBlockhash, 20000);
+
   }catch(e){log("CONNECT ERROR: "+e.message,"err");}
   CONNECTING=false;
 }
@@ -315,6 +377,7 @@ async function doQuote(){
 
   clearQuote();
   document.getElementById("bq").disabled=true;
+  document.getElementById("bq").textContent="FETCHING...";
   log("\n--- FETCHING QUOTE ---","info");
   log("Selling "+amt+" "+sell.label+" → "+buy.label+" (slip: "+slip/100+"%)","dim");
 
@@ -329,14 +392,13 @@ async function doQuote(){
 
     var r=await fetch(url);
     if(!r.ok){
-      var err=await r.text();
-      throw new Error("Jupiter API "+r.status+": "+err.slice(0,200));
+      var errTxt=await r.text();
+      throw new Error("Jupiter "+r.status+": "+errTxt.slice(0,200));
     }
     var q=await r.json();
     if(q.error) throw new Error(q.error);
     LAST_QUOTE=q;
 
-    // Parse values
     var outRaw  =parseInt(q.outAmount);
     var outUI   =outRaw/Math.pow(10,buy.dec);
     var minRaw  =parseInt(q.otherAmountThreshold||q.outAmount);
@@ -347,7 +409,6 @@ async function doQuote(){
       ? q.routePlan.map(function(s){return s.swapInfo&&s.swapInfo.label||"?"}).join(" → ")
       : "Direct";
 
-    // Color price impact
     var impactClass=impact<0.1?"green":impact<1?"ok":impact<3?"warn":"bad";
     var impactStr  =impact.toFixed(4)+"%";
 
@@ -363,14 +424,21 @@ async function doQuote(){
     document.getElementById("quoteBox").classList.add("show");
     document.getElementById("bs").disabled=false;
 
-    log("QUOTE: sell "+amt+" "+sell.label+" → get ~"+outUI.toLocaleString(undefined,{maximumFractionDigits:4})+" "+buy.label,"hi");
+    log("QUOTE OK: sell "+amt+" "+sell.label+" → ~"+outUI.toLocaleString(undefined,{maximumFractionDigits:4})+" "+buy.label,"hi");
     log("Impact: "+impactStr+" | Route: "+route.slice(0,60),"dim");
-    if(impact>=3) log("WARNING: High price impact ("+impactStr+"). Consider reducing amount.","warn");
+    if(impact>=3) log("WARNING: High price impact ("+impactStr+"). Consider smaller amount.","warn");
+
+    // Pre-warm blockhash now so swap is instant
+    refreshBlockhash();
 
   }catch(e){
     log("QUOTE ERROR: "+e.message,"err");
+    if(e.message.indexOf("fetch")>-1||e.message.indexOf("network")>-1){
+      log("Tip: Check your internet connection. Jupiter API may be briefly unavailable.","dim");
+    }
   }
   document.getElementById("bq").disabled=false;
+  document.getElementById("bq").textContent="&#9654; GET QUOTE";
 }
 
 // ── Swap ───────────────────────────────────────────────────────────
@@ -405,14 +473,12 @@ async function doSwap(){
     var swapJson=await swapRes.json();
     if(swapJson.error) throw new Error(swapJson.error);
 
-    // Deserialize → sign → send
     var txBytes=Uint8Array.from(atob(swapJson.swapTransaction),function(c){return c.charCodeAt(0);});
     var tx=solanaWeb3.VersionedTransaction.deserialize(txBytes);
 
     log(">>> APPROVE IN PHANTOM...","info");
     var signed=await p.signTransaction(tx);
 
-    // Send via raw fetch (skip preflight for reliability)
     var b64=btoa(String.fromCharCode.apply(null,signed.serialize()));
     var sendRes=await fetch(RPCS[0],{
       method:"POST",headers:{"Content-Type":"application/json"},
@@ -423,7 +489,6 @@ async function doSwap(){
     if(sendJson.error) throw new Error(sendJson.error.message||JSON.stringify(sendJson.error));
     var sig=sendJson.result;
 
-    // Poll confirmation
     log('TX: <a href="https://solscan.io/tx/'+sig+'" target="_blank">solscan.io/tx/'+sig.slice(0,20)+'...</a>',"info");
     var start=Date.now();
     var confirmed=false;
@@ -447,7 +512,6 @@ async function doSwap(){
     }
     if(!confirmed) throw new Error("Confirmation timeout — check Solscan for status");
 
-    // Refresh SOL balance
     try{
       var newBal=(await rpcFetch("getBalance",[addr])).value/1e9;
       document.getElementById("b").textContent=newBal.toFixed(4)+" SOL";
@@ -475,7 +539,8 @@ async function doSwap(){
 }
 
 // ── Init ───────────────────────────────────────────────────────────
-buildDropdowns(); // show defaults before connect
+buildDropdowns();
+warmJupiter(); // pre-warm Jupiter connection on page load
 
 window.addEventListener("load",async function(){
   try{

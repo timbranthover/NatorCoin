@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html><head><title>NATOR // TRANSFER TERMINAL v2</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -79,16 +80,43 @@ button:disabled{border-color:#3a2800;color:#3a2800;cursor:not-allowed}
 
 a{color:#ff6a00;text-decoration:none}
 a:hover{text-decoration:underline}
-.home-btn{position:fixed;top:16px;right:16px;background:#0d0900;border:1px solid #7a5200;color:#c87800;font-family:"Courier New",Courier,monospace;font-size:11px;letter-spacing:2px;padding:5px 12px;cursor:pointer;text-decoration:none;z-index:10000;text-transform:uppercase}
-.home-btn:hover{background:#7a5200;color:#ffb000;border-color:#ffb000}
+
+/* Nav — HOME leftmost */
+.nav{margin-bottom:16px;font-size:11px;display:flex;align-items:center;gap:0}
+.nav a{color:#7a5200;text-decoration:none;letter-spacing:1px;text-transform:uppercase;
+  background:#0d0900;border:1px solid #3a2000;padding:4px 10px;margin-right:4px;transition:color 0.1s,background 0.1s}
+.nav a:hover{color:#ffb000;background:#1a0e00;border-color:#7a5200}
+.nav a.nav-home{color:#c87800;border-color:#7a5200}
+.nav a.nav-home:hover{color:#ffb000;background:#2a1500;border-color:#ffb000}
 
 .amt-row{display:flex;gap:8px;align-items:flex-end}
 .amt-row input{flex:1}
 .pct-btns{display:flex;gap:4px;margin-top:4px}
 .pct-btns button{margin:0;padding:5px 10px;font-size:11px;border-color:#7a5200;color:#c87800}
 .pct-btns button:hover{background:#7a5200;color:#ffb000}
+
+/* ── Mobile responsive ────────────────────────────────── */
+@media(max-width:600px){
+  body{padding:14px 12px;font-size:14px}
+  h1{font-size:15px;letter-spacing:2px}
+  .block{padding:12px 10px}
+  input[type=text],input[type=number]{font-size:14px;padding:10px 10px}
+  button{font-size:13px;padding:11px 16px;letter-spacing:1px}
+  .pct-btns button{font-size:12px;padding:8px 10px}
+  .pct-btns{gap:6px}
+  .stat-row{flex-wrap:wrap}
+  .stat-val{min-width:0;word-break:break-all;font-size:12px}
+  #log{font-size:12px;min-height:160px;max-height:260px}
+  .nav a{padding:5px 9px;font-size:11px}
+}
 </style></head><body>
-<a href="index.html" class="home-btn">&#8592; HOME</a>
+
+<div class="nav">
+  <a href="index.html" class="nav-home">&#8592; HOME</a>
+  <a href="transfer.html">Transfer</a>
+  <a href="swap.html">Swap</a>
+</div>
+
 <h1>&#9608; NATOR <span>//</span> TRANSFER TERMINAL &#9608;</h1>
 
 <div class="block">
@@ -132,7 +160,7 @@ Awaiting wallet connection...
 var WP, CN, NATOR_BAL = 90000000, CONNECTING = false;
 var MINT    = "2VwjCeAc1iZpefKHNj43t1MpNcyr9CsGYtM3FbXSGG9v";
 var SRC_TA  = "CcJVJ76JG9KxdXU2ZZaj2kjD2ik2Ws1R1Uk7V4Hxe77p"; // EM864e NATOR token account (90M)
-var RPCS    = ["https://solana-rpc.publicnode.com","https://api.mainnet-beta.solana.com"];
+var RPCS    = ["https://api.mainnet-beta.solana.com","https://solana-rpc.publicnode.com"];
 
 function log(m, c){
   var d = document.getElementById("log");
@@ -151,7 +179,6 @@ function setPct(pct){
 }
 
 async function findNatorTA(owner){
-  // Find this wallet's NATOR token account
   var res = await CN.getParsedTokenAccountsByOwner(owner, {mint: new solanaWeb3.PublicKey(MINT)});
   if(res.value.length > 0) return res.value[0];
   return null;
@@ -166,6 +193,7 @@ async function doConnect(){
     log("Connecting to Phantom...","info");
     var r = await p.connect();
     WP = r.publicKey;
+
     // Try RPCs in order until one works
     var bal = null;
     for(var i=0; i<RPCS.length; i++){
@@ -176,19 +204,21 @@ async function doConnect(){
         break;
       }catch(re){ log("RPC "+RPCS[i]+" failed, trying next...","dim"); }
     }
-    if(bal === null){ log("ERROR: All RPCs failed. Try again in a moment.","err"); return; }
+    if(bal === null){ log("ERROR: All RPCs failed. Try again in a moment.","err"); CONNECTING=false; return; }
+
     document.getElementById("w").textContent = WP.toBase58().slice(0,8)+"..."+WP.toBase58().slice(-6);
     document.getElementById("b").textContent = (bal/1e9).toFixed(4) + " SOL";
     log("CONNECTED: " + WP.toBase58(), "hi");
     log("SOL: " + (bal/1e9).toFixed(6), "ok");
-    // Find NATOR balance
+
+    // Find NATOR balance (parallel with connect — non-blocking)
     try{
       var ta = await findNatorTA(WP);
       if(ta){
         NATOR_BAL = parseFloat(ta.account.data.parsed.info.tokenAmount.uiAmountString);
         document.getElementById("nb").textContent = NATOR_BAL.toLocaleString() + " NATOR";
         log("NATOR BALANCE: " + NATOR_BAL.toLocaleString(), "hi");
-        document.getElementById("amt").value = Math.floor(NATOR_BAL * 0.01); // default 1%
+        document.getElementById("amt").value = Math.floor(NATOR_BAL * 0.01);
       } else {
         document.getElementById("nb").textContent = "90,000,000 NATOR";
         log("Balance lookup skipped — defaulting to 90M.", "dim");
@@ -238,7 +268,7 @@ async function doTransfer(){
     var TOKEN  = new PK("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
     var RENT   = new PK("SysvarRent111111111111111111111111111111111");
     var mint   = new PK(MINT);
-    var srcTA  = new PK(SRC_TA); // hardcoded — no RPC lookup needed
+    var srcTA  = new PK(SRC_TA);
     var destPK = new PK(destAddr);
     var amtRaw = BigInt(Math.round(amtUI * 1e9));
 
@@ -247,7 +277,6 @@ async function doTransfer(){
     log("TO     : " + destAddr);
     log("SRC TA : " + SRC_TA.slice(0,16)+"...");
 
-    // Always create a fresh token account for destination (proven reliable, no lookup needed)
     var taRent = await CN.getMinimumBalanceForRentExemption(165);
     var destKP = KP.generate();
     var destTA = destKP.publicKey;
@@ -259,11 +288,8 @@ async function doTransfer(){
 
     var bh = (await CN.getLatestBlockhash("finalized")).blockhash;
     var tx = new TX({recentBlockhash:bh, feePayer:WP});
-    // 1. Create dest token account
     tx.add(SP.createAccount({fromPubkey:WP, newAccountPubkey:destTA, space:165, lamports:taRent, programId:TOKEN}));
-    // 2. Init dest token account owned by destPK
     tx.add(new TI({keys:[{pubkey:destTA,isSigner:false,isWritable:true},{pubkey:mint,isSigner:false,isWritable:false},{pubkey:destPK,isSigner:false,isWritable:false},{pubkey:RENT,isSigner:false,isWritable:false}], programId:TOKEN, data:iad}));
-    // 3. Transfer NATOR from src to dest
     tx.add(new TI({keys:[{pubkey:srcTA,isSigner:false,isWritable:true},{pubkey:destTA,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}], programId:TOKEN, data:tfd}));
 
     tx.partialSign(destKP);
@@ -290,7 +316,6 @@ async function doTransfer(){
   document.getElementById("bm").disabled = false;
 }
 
-// Auto-connect if Phantom already has permission (silent, no popup)
 window.addEventListener("load", async function(){
   try{
     var p = window.solana || (window.phantom && window.phantom.solana);

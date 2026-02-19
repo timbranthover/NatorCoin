@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html><head><title>SOLANA // TRANSFER TERMINAL</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -20,8 +21,13 @@ input[type=text],input[type=number],select{
 }
 input:focus,select:focus{border-color:#ffb000;box-shadow:0 0 6px rgba(255,176,0,0.3)}
 input::placeholder{color:#4a3200}
+/* Amber dropdown — kill OS blue hover */
+select{cursor:pointer;color-scheme:dark}
 select option{background:#0d0900;color:#ffb000}
-select{cursor:pointer}
+select option:hover,select option:focus,select option:checked{
+  background:#3a2000;color:#ffb000;
+  background:linear-gradient(#3a2000,#3a2000);
+}
 button{
   background:#0d0900;color:#ffb000;border:1px solid #ffb000;
   padding:10px 22px;font-family:"Courier New",Courier,monospace;
@@ -46,10 +52,38 @@ a:hover{text-decoration:underline}
 .pct-btns button{margin:0;padding:5px 10px;font-size:11px;border-color:#7a5200;color:#c87800}
 .pct-btns button:hover{background:#7a5200;color:#ffb000}
 .token-row{display:flex;justify-content:space-between;font-size:11px;color:#7a5200;margin-top:6px}
-.home-btn{position:fixed;top:16px;right:16px;background:#0d0900;border:1px solid #7a5200;color:#c87800;font-family:"Courier New",Courier,monospace;font-size:11px;letter-spacing:2px;padding:5px 12px;cursor:pointer;text-decoration:none;z-index:10000;text-transform:uppercase}
-.home-btn:hover{background:#7a5200;color:#ffb000;border-color:#ffb000}
+
+/* Nav — HOME leftmost */
+.nav{margin-bottom:16px;font-size:11px;display:flex;align-items:center;gap:0}
+.nav a{color:#7a5200;text-decoration:none;letter-spacing:1px;text-transform:uppercase;
+  background:#0d0900;border:1px solid #3a2000;padding:4px 10px;margin-right:4px;transition:color 0.1s,background 0.1s}
+.nav a:hover{color:#ffb000;background:#1a0e00;border-color:#7a5200}
+.nav a.nav-home{color:#c87800;border-color:#7a5200}
+.nav a.nav-home:hover{color:#ffb000;background:#2a1500;border-color:#ffb000}
+
+/* ── Mobile responsive ────────────────────────────────── */
+@media(max-width:600px){
+  body{padding:14px 12px;font-size:14px}
+  h1{font-size:15px;letter-spacing:2px}
+  .block{padding:12px 10px}
+  input[type=text],input[type=number],select{font-size:14px;padding:10px 10px}
+  button{font-size:13px;padding:11px 16px;letter-spacing:1px}
+  .pct-btns button{font-size:12px;padding:8px 10px}
+  .pct-btns{gap:6px}
+  .stat-row{flex-wrap:wrap}
+  .stat-val{min-width:0;word-break:break-all;font-size:12px}
+  #log{font-size:12px;min-height:160px;max-height:260px}
+  .nav a{padding:5px 9px;font-size:11px}
+  .token-row{flex-direction:column;gap:2px}
+}
 </style></head><body>
-<a href="index.html" class="home-btn">&#8592; HOME</a>
+
+<div class="nav">
+  <a href="index.html" class="nav-home">&#8592; HOME</a>
+  <a href="nator_send.html">Send NATOR</a>
+  <a href="swap.html">Swap</a>
+</div>
+
 <h1>&#9608; SOLANA <span>//</span> TRANSFER TERMINAL &#9608;</h1>
 
 <div class="block">
@@ -97,8 +131,8 @@ Supports SOL + any SPL token.
 
 <script>
 var WP, ACTIVE_RPC, CONNECTING = false;
-var TOKENS = []; // [{label, mint, decimals, balance, srcTA}]
-var RPCS = ["https://solana-rpc.publicnode.com","https://api.mainnet-beta.solana.com"];
+var TOKENS = [];
+var RPCS = ["https://api.mainnet-beta.solana.com","https://solana-rpc.publicnode.com"];
 var KNOWN = {"2VwjCeAc1iZpefKHNj43t1MpNcyr9CsGYtM3FbXSGG9v":"NATOR"};
 
 function log(m,c){
@@ -125,22 +159,15 @@ async function rpc(method, params){
   throw last||new Error("All RPCs failed");
 }
 
-async function getBalance(addr){
-  return (await rpc("getBalance",[addr])).value;
-}
-async function getLatestBlockhash(){
-  return (await rpc("getLatestBlockhash",[{commitment:"finalized"}])).value.blockhash;
-}
-async function getRentExemption(size){
-  return await rpc("getMinimumBalanceForRentExemption",[size]);
-}
+async function getBalance(addr){ return (await rpc("getBalance",[addr])).value; }
+async function getLatestBlockhash(){ return (await rpc("getLatestBlockhash",[{commitment:"finalized"}])).value.blockhash; }
+async function getRentExemption(size){ return await rpc("getMinimumBalanceForRentExemption",[size]); }
 async function sendTx(serialized){
   var b64 = btoa(String.fromCharCode.apply(null,serialized));
-  var res = await rpc("sendTransaction",[b64,{encoding:"base64",skipPreflight:true,maxRetries:5}]);
-  return res; // signature string
+  return await rpc("sendTransaction",[b64,{encoding:"base64",skipPreflight:true,maxRetries:5}]);
 }
 async function getTokenAccounts(addr){
-  // Try each RPC explicitly with jsonParsed — mainnet-beta handles this better
+  // mainnet-beta first — handles jsonParsed most reliably
   var rpcsOrdered = ["https://api.mainnet-beta.solana.com","https://solana-rpc.publicnode.com"];
   var body = JSON.stringify({jsonrpc:"2.0",id:1,method:"getTokenAccountsByOwner",
     params:[addr,{programId:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{encoding:"jsonParsed"}]});
@@ -151,7 +178,7 @@ async function getTokenAccounts(addr){
       if(j.result && j.result.value) return j.result.value;
     }catch(e){}
   }
-  return []; // empty — better than crashing
+  return [];
 }
 async function getSigStatus(sig){
   var res = await rpc("getSignatureStatuses",[[sig],{searchTransactionHistory:true}]);
@@ -188,43 +215,43 @@ async function doConnect(){
     var r=await p.connect();
     WP=r.publicKey;
     var walletAddr=WP.toBase58();
-    var bal=await getBalance(walletAddr);
+
+    // Parallel: SOL balance + token accounts
+    log("Loading balances...","dim");
+    var [balResult, tokenResult] = await Promise.allSettled([
+      getBalance(walletAddr),
+      getTokenAccounts(walletAddr)
+    ]);
+
+    var bal = balResult.status==="fulfilled" ? balResult.value : 0;
     document.getElementById("w").textContent=walletAddr.slice(0,8)+"..."+walletAddr.slice(-6);
     document.getElementById("b").textContent=(bal/1e9).toFixed(4)+" SOL";
     log("CONNECTED: "+walletAddr,"hi");
     log("SOL: "+(bal/1e9).toFixed(6)+" | RPC: "+ACTIVE_RPC,"dim");
     document.getElementById("bc").disabled=true;
     document.getElementById("bc").textContent="&#10003; CONNECTED";
-    await loadTokens(walletAddr, bal);
+    await loadTokens(walletAddr, bal, tokenResult.status==="fulfilled" ? tokenResult.value : []);
   }catch(e){log("CONNECT ERROR: "+e.message,"err");}
   CONNECTING=false;
 }
 
 // ── Load tokens into dropdown ────────────────────────────────────
-async function loadTokens(walletAddr, solBal){
-  log("Loading tokens...","dim");
+async function loadTokens(walletAddr, solBal, accts){
   TOKENS=[];
-  // SOL always first
   TOKENS.push({label:"SOL", mint:"SOL", decimals:9, balance:solBal/1e9, srcTA:null});
 
-  try{
-    var accts=await getTokenAccounts(walletAddr);
-    log("Found "+accts.length+" token account(s).","dim");
-    for(var i=0;i<accts.length;i++){
-      var info=accts[i].account.data.parsed.info;
-      var mint=info.mint;
-      var bal=parseFloat(info.tokenAmount.uiAmountString||"0");
-      var dec=info.tokenAmount.decimals;
-      if(bal<=0) continue; // skip empty accounts
-      var sym=KNOWN[mint]||(mint.slice(0,8)+"..."+mint.slice(-4));
-      TOKENS.push({label:sym, mint:mint, decimals:dec, balance:bal, srcTA:accts[i].pubkey});
-    }
-    log("Loaded "+TOKENS.length+" asset(s) with balance.","dim");
-  }catch(e){
-    log("Token load error: "+e.message,"err");
+  log("Found "+accts.length+" token account(s).","dim");
+  for(var i=0;i<accts.length;i++){
+    var info=accts[i].account.data.parsed.info;
+    var mint=info.mint;
+    var bal=parseFloat(info.tokenAmount.uiAmountString||"0");
+    var dec=info.tokenAmount.decimals;
+    if(bal<=0) continue;
+    var sym=KNOWN[mint]||(mint.slice(0,8)+"..."+mint.slice(-4));
+    TOKENS.push({label:sym, mint:mint, decimals:dec, balance:bal, srcTA:accts[i].pubkey});
   }
+  log("Loaded "+TOKENS.length+" asset(s) with balance.","dim");
 
-  // Populate dropdown
   var sel=document.getElementById("tokenSel");
   sel.innerHTML="";
   for(var i=0;i<TOKENS.length;i++){
@@ -258,14 +285,10 @@ function getPct(pct){
   var idx=parseInt(sel.value);
   if(isNaN(idx)||!TOKENS[idx]) return 0;
   var bal=TOKENS[idx].balance;
-  // For SOL keep a small reserve for fees
   if(TOKENS[idx].mint==="SOL" && pct===100) bal=Math.max(0,bal-0.002);
   return parseFloat((bal*pct/100).toFixed(TOKENS[idx].decimals));
 }
-function setPct(pct){
-  var amt=getPct(pct);
-  document.getElementById("amt").value=amt;
-}
+function setPct(pct){ document.getElementById("amt").value=getPct(pct); }
 
 // ── Transfer ─────────────────────────────────────────────────────
 async function doTransfer(){
@@ -314,7 +337,6 @@ async function doTransfer(){
       var srcTA=new PK(token.srcTA);
       var mintPK=new PK(token.mint);
 
-      // Create fresh destination token account (no ATA lookup needed)
       var taRent=await getRentExemption(165);
       var destKP=KP.generate();
       var destTA=destKP.publicKey;
@@ -324,11 +346,8 @@ async function doTransfer(){
       var tfd=new Uint8Array(9); tfd[0]=3;
       new DataView(tfd.buffer).setBigUint64(1,amtRaw,true);
 
-      // 1. Create dest token account
       tx.add(SP.createAccount({fromPubkey:WP,newAccountPubkey:destTA,space:165,lamports:taRent,programId:TOKEN_PROG}));
-      // 2. Init dest token account owned by destPK
       tx.add(new TI({keys:[{pubkey:destTA,isSigner:false,isWritable:true},{pubkey:mintPK,isSigner:false,isWritable:false},{pubkey:destPK,isSigner:false,isWritable:false},{pubkey:RENT_SYS,isSigner:false,isWritable:false}],programId:TOKEN_PROG,data:iad}));
-      // 3. Transfer tokens
       tx.add(new TI({keys:[{pubkey:srcTA,isSigner:false,isWritable:true},{pubkey:destTA,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}],programId:TOKEN_PROG,data:tfd}));
 
       tx.partialSign(destKP);
@@ -337,7 +356,6 @@ async function doTransfer(){
       var sig=await sendTx(signed.serialize());
       await poll(sig,token.label+" Transfer");
 
-      // Update local balance
       TOKENS[idx].balance=Math.max(0,token.balance-amtUI);
       var opt=sel.options[idx];
       opt.textContent=token.label+" — "+TOKENS[idx].balance.toLocaleString()+" tokens";
