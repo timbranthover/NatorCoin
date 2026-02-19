@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html><head><title>NATOR - Update Metadata + Transfer</title>
+<script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+<style>
+body{font-family:monospace;background:#111;color:#0f0;padding:20px;max-width:900px}
+button{background:#0f0;color:#111;border:none;padding:12px 24px;font-size:16px;cursor:pointer;margin:8px 4px;font-weight:bold;border-radius:4px}
+button:disabled{background:#555;color:#999;cursor:not-allowed}
+#log{white-space:pre-wrap;margin-top:20px;border:1px solid #0f0;padding:12px;min-height:200px;background:#0a0a0a;font-size:13px}
+.ok{color:#0f0}.err{color:#f55}.info{color:#ff0}h2{color:#0ff}
+img{max-width:140px;border:2px solid #0f0;margin:8px 0;display:block}
+</style></head><body>
+<h2>NATOR - Update Metadata + Move Tokens to Wallet</h2>
+<img src="https://files.catbox.moe/ik1u71.jpg" alt="NATOR frog"/>
+<p>Mint: <b>Fv4WvpauMMbvCQ9uqMoS8fjGrYaAqGMqD66TEfU6M2TS</b></p>
+<p>Wallet: <b id="w">not connected</b> | Balance: <b id="b">-</b></p>
+<button id="bc" onclick="doConnect()">1. Connect Phantom</button>
+<button id="bm" onclick="doAll()" disabled>2. UPDATE + TRANSFER (2 approvals)</button>
+<div id="log">Ready...
+</div>
+<script>
+var WP, CN;
+var MINT = "Fv4WvpauMMbvCQ9uqMoS8fjGrYaAqGMqD66TEfU6M2TS";
+var OLD_TA = "uxL832AXaqqzpLiMELCongkNyFfPzVp9KdDoZunpy7T";
+var META_URI = "https://files.catbox.moe/9q60bc.json";
+function logMsg(m,c){var d=document.getElementById("log");var s=document.createElement("span");s.className=c||"ok";s.textContent=m+"\n";d.appendChild(s);d.scrollTop=d.scrollHeight;}
+async function doConnect(){
+  try{
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    if(!p){logMsg("No Phantom found!","err");return;}
+    var r=await p.connect();
+    WP=r.publicKey;
+    CN=new solanaWeb3.Connection("https://solana-rpc.publicnode.com","confirmed");
+    var bal=await CN.getBalance(WP);
+    document.getElementById("w").textContent=WP.toBase58();
+    document.getElementById("b").textContent=(bal/1e9).toFixed(6)+" SOL";
+    logMsg("Connected: "+WP.toBase58());
+    logMsg("Balance: "+(bal/1e9).toFixed(6)+" SOL");
+    document.getElementById("bm").disabled=false;
+    document.getElementById("bc").disabled=true;
+  }catch(e){logMsg("Error: "+e.message,"err");}
+}
+async function poll(sig,label){
+  logMsg("TX: https://solscan.io/tx/"+sig);
+  var start=Date.now();
+  while(Date.now()-start<90000){
+    try{
+      var st=await CN.getSignatureStatuses([sig],{searchTransactionHistory:true});
+      if(st&&st.value[0]){
+        if(st.value[0].err) throw new Error("TX failed: "+JSON.stringify(st.value[0].err));
+        if(st.value[0].confirmationStatus==="confirmed"||st.value[0].confirmationStatus==="finalized"){
+          logMsg("Confirmed: "+label); return sig;
+        }
+      }
+    }catch(se){if(se.message&&se.message.includes("TX failed")) throw se;}
+    await new Promise(r=>setTimeout(r,2000));
+  }
+  logMsg("Warning: timeout - tx may still confirm","err"); return sig;
+}
+async function doAll(){
+  document.getElementById("bm").disabled=true;
+  try{
+    var PK=solanaWeb3.PublicKey,KP=solanaWeb3.Keypair,TX=solanaWeb3.Transaction,SP=solanaWeb3.SystemProgram,TI=solanaWeb3.TransactionInstruction;
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    var TOKEN=new PK("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    var META=new PK("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+    var RENT=new PK("SysvarRent111111111111111111111111111111111");
+    var mint=new PK(MINT);
+    var oldTA=new PK(OLD_TA);
+    function encStr(s){var b=new TextEncoder().encode(s),o=new Uint8Array(4+b.length),dv=new DataView(o.buffer);dv.setUint32(0,b.length,true);o.set(b,4);return o;}
+
+    // TX-A: UpdateMetadataAccountV2 (discriminator=15)
+    logMsg("\n=== TX-A: Update Metadata URI + Image ===","info");
+    var mpda=PK.findProgramAddressSync([new TextEncoder().encode("metadata"),META.toBytes(),mint.toBytes()],META)[0];
+    logMsg("Meta PDA: "+mpda.toBase58());
+    var nb=encStr("NATOR"),sb=encStr("NATOR"),ub=encStr(META_URI);
+    // UpdateMetadataAccountV2: discriminator=15, then DataV2 struct
+    // Layout: [15, name_len(4)+name, symbol_len(4)+symbol, uri_len(4)+uri, seller_fee(2), creators_option(1)=0, collection_option(1)=0, uses_option(1)=0, update_authority_option(1)=0, primary_sale(1)=0, is_mutable(1)=1]
+    var totalLen = 1 + nb.length + sb.length + ub.length + 2 + 1 + 1 + 1 + 1 + 1 + 1;
+    var md=new Uint8Array(totalLen),off=0;
+    md[off++]=15;
+    md.set(nb,off);off+=nb.length;
+    md.set(sb,off);off+=sb.length;
+    md.set(ub,off);off+=ub.length;
+    md[off++]=0;md[off++]=0; // seller_fee_basis_points u16 LE = 0
+    md[off++]=0; // creators Option = None
+    md[off++]=0; // collection Option = None
+    md[off++]=0; // uses Option = None
+    md[off++]=0; // new_update_authority Option = None
+    md[off++]=0; // primary_sale_happened Option = None
+    md[off++]=1; // is_mutable Option = Some(true) -- set 1 for the option present flag
+    // Wait, is_mutable option needs: 1 (Some) + 1 (value)
+    // Let me fix: last byte should be Some(true) = [1, 1]
+    // Rebuild properly
+    var totalLen2 = 1 + nb.length + sb.length + ub.length + 2 + 1 + 1 + 1 + 1 + 2;
+    var md2=new Uint8Array(totalLen2),off2=0;
+    md2[off2++]=15;
+    md2.set(nb,off2);off2+=nb.length;
+    md2.set(sb,off2);off2+=sb.length;
+    md2.set(ub,off2);off2+=ub.length;
+    md2[off2++]=0;md2[off2++]=0; // seller_fee u16
+    md2[off2++]=0; // creators = None
+    md2[off2++]=0; // collection = None
+    md2[off2++]=0; // uses = None
+    md2[off2++]=0; // new_update_authority = None
+    md2[off2++]=1;md2[off2++]=0; // is_mutable = Some(false) to keep as-is
+    var bha=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var ta=new TX({recentBlockhash:bha,feePayer:WP});
+    ta.add(new TI({keys:[{pubkey:mpda,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}],programId:META,data:md2}));
+    logMsg(">>> Approve TX-A in Phantom...","info");
+    var sigA=await CN.sendRawTransaction((await p.signTransaction(ta)).serialize(),{skipPreflight:true,maxRetries:3});
+    await poll(sigA,"TX-A Metadata");
+
+    // TX-B: Create new token account + Transfer 100M from old account
+    logMsg("\n=== TX-B: Move 100M NATOR to your wallet ===","info");
+    var taKP=KP.generate();
+    var taRent=await CN.getMinimumBalanceForRentExemption(165);
+    logMsg("New token account: "+taKP.publicKey.toBase58());
+    var iad=new Uint8Array(1);iad[0]=1;
+    var tfd=new Uint8Array(9);tfd[0]=3;
+    new DataView(tfd.buffer).setBigUint64(1,BigInt("100000000000000000"),true);
+    var bhb=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var tb=new TX({recentBlockhash:bhb,feePayer:WP});
+    tb.add(SP.createAccount({fromPubkey:WP,newAccountPubkey:taKP.publicKey,space:165,lamports:taRent,programId:TOKEN}));
+    tb.add(new TI({keys:[{pubkey:taKP.publicKey,isSigner:false,isWritable:true},{pubkey:mint,isSigner:false,isWritable:false},{pubkey:WP,isSigner:false,isWritable:false},{pubkey:RENT,isSigner:false,isWritable:false}],programId:TOKEN,data:iad}));
+    tb.add(new TI({keys:[{pubkey:oldTA,isSigner:false,isWritable:true},{pubkey:taKP.publicKey,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}],programId:TOKEN,data:tfd}));
+    tb.partialSign(taKP);
+    logMsg(">>> Approve TX-B in Phantom...","info");
+    var sigB=await CN.sendRawTransaction((await p.signTransaction(tb)).serialize(),{skipPreflight:true,maxRetries:3});
+    await poll(sigB,"TX-B Transfer");
+
+    var fb=await CN.getBalance(WP);
+    document.getElementById("b").textContent=(fb/1e9).toFixed(6)+" SOL";
+    logMsg("\n=============================","info");
+    logMsg("  NATOR 100% COMPLETE!       ","info");
+    logMsg("=============================","info");
+    logMsg("Image: https://files.catbox.moe/ik1u71.jpg","info");
+    logMsg("Metadata: "+META_URI,"info");
+    logMsg("Token: https://solscan.io/token/"+MINT,"info");
+    logMsg("Your tokens: "+taKP.publicKey.toBase58(),"info");
+    logMsg("SOL left: "+(fb/1e9).toFixed(6),"info");
+  }catch(e){logMsg("ERROR: "+e.message,"err");console.error(e);document.getElementById("bm").disabled=false;}
+}
+</script></body></html>

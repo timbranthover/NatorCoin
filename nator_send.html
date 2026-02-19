@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html><head><title>NATOR Transfer</title>
+<script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+<style>
+body{font-family:monospace;background:#111;color:#0f0;padding:20px;max-width:900px}
+button{background:#0f0;color:#111;border:none;padding:12px 24px;font-size:16px;cursor:pointer;margin:8px 4px;font-weight:bold;border-radius:4px}
+button:disabled{background:#555;color:#999;cursor:not-allowed}
+input{background:#222;color:#0f0;border:1px solid #0f0;padding:8px;width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;margin:4px 0}
+label{color:#ff0;font-size:13px}
+#log{white-space:pre-wrap;margin-top:20px;border:1px solid #0f0;padding:12px;min-height:150px;background:#0a0a0a;font-size:13px}
+.ok{color:#0f0}.err{color:#f55}.info{color:#ff0}h2{color:#0ff}
+</style></head><body>
+<h2>NATOR - Send Tokens to Any Wallet</h2>
+<p>Source token acct: <b>uxL832AXaqqzpLiMELCongkNyFfPzVp9KdDoZunpy7T</b></p>
+<p>Wallet: <b id="w">not connected</b> | Balance: <b id="b">-</b></p>
+<button id="bc" onclick="doConnect()">1. Connect Phantom (creator wallet)</button>
+<br/><br/>
+<label>Destination wallet address (any Solana wallet):</label>
+<input id="dest" type="text" placeholder="Paste destination SOL wallet address here..." />
+<label>Amount of NATOR to send (max 100,000,000):</label>
+<input id="amt" type="number" value="1000000" min="1" max="100000000" />
+<br/>
+<button id="bm" onclick="doTransfer()" disabled>2. SEND NATOR</button>
+<div id="log">Ready...
+</div>
+<script>
+var WP, CN;
+var MINT = "Fv4WvpauMMbvCQ9uqMoS8fjGrYaAqGMqD66TEfU6M2TS";
+var SRC_TA = "uxL832AXaqqzpLiMELCongkNyFfPzVp9KdDoZunpy7T";
+function logMsg(m,c){var d=document.getElementById("log");var s=document.createElement("span");s.className=c||"ok";s.textContent=m+"\n";d.appendChild(s);d.scrollTop=d.scrollHeight;}
+async function doConnect(){
+  try{
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    if(!p){logMsg("No Phantom found!","err");return;}
+    var r=await p.connect();
+    WP=r.publicKey;
+    CN=new solanaWeb3.Connection("https://solana-rpc.publicnode.com","confirmed");
+    var bal=await CN.getBalance(WP);
+    document.getElementById("w").textContent=WP.toBase58();
+    document.getElementById("b").textContent=(bal/1e9).toFixed(6)+" SOL";
+    logMsg("Connected: "+WP.toBase58());
+    // Check source token account balance
+    try{
+      var srcInfo=await CN.getTokenAccountBalance(new solanaWeb3.PublicKey(SRC_TA));
+      logMsg("Source NATOR balance: "+srcInfo.value.uiAmountString);
+    }catch(e){logMsg("Could not read source balance: "+e.message,"err");}
+    document.getElementById("bm").disabled=false;
+    document.getElementById("bc").disabled=true;
+  }catch(e){logMsg("Error: "+e.message,"err");}
+}
+async function poll(sig,label){
+  logMsg("TX: https://solscan.io/tx/"+sig);
+  var start=Date.now();
+  while(Date.now()-start<90000){
+    try{
+      var st=await CN.getSignatureStatuses([sig],{searchTransactionHistory:true});
+      if(st&&st.value[0]){
+        if(st.value[0].err) throw new Error("TX failed: "+JSON.stringify(st.value[0].err));
+        if(st.value[0].confirmationStatus==="confirmed"||st.value[0].confirmationStatus==="finalized"){
+          logMsg("Confirmed: "+label); return sig;
+        }
+      }
+    }catch(se){if(se.message&&se.message.includes("TX failed")) throw se;}
+    await new Promise(r=>setTimeout(r,2000));
+  }
+  logMsg("Warning: timeout - may still confirm","err"); return sig;
+}
+async function doTransfer(){
+  var destAddr=document.getElementById("dest").value.trim();
+  var amtUI=parseFloat(document.getElementById("amt").value);
+  if(!destAddr){logMsg("Enter a destination address!","err");return;}
+  if(!amtUI||amtUI<=0){logMsg("Enter a valid amount!","err");return;}
+  document.getElementById("bm").disabled=true;
+  try{
+    var PK=solanaWeb3.PublicKey,KP=solanaWeb3.Keypair,TX=solanaWeb3.Transaction,SP=solanaWeb3.SystemProgram,TI=solanaWeb3.TransactionInstruction;
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    var TOKEN=new PK("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    var RENT=new PK("SysvarRent111111111111111111111111111111111");
+    var mint=new PK(MINT);
+    var srcTA=new PK(SRC_TA);
+    var destPK=new PK(destAddr);
+    // Amount with 9 decimals
+    var amtRaw=BigInt(Math.round(amtUI*1e9));
+    logMsg("Sending "+amtUI.toLocaleString()+" NATOR to "+destAddr,"info");
+    // Create a fresh token account for destination
+    var destKP=KP.generate();
+    var taRent=await CN.getMinimumBalanceForRentExemption(165);
+    logMsg("Creating token account for destination...");
+    // InitializeAccount data
+    var iad=new Uint8Array(1);iad[0]=1;
+    // Transfer data
+    var tfd=new Uint8Array(9);tfd[0]=3;
+    new DataView(tfd.buffer).setBigUint64(1,amtRaw,true);
+    var bh=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var tx=new TX({recentBlockhash:bh,feePayer:WP});
+    // 1. Create dest token account
+    tx.add(SP.createAccount({fromPubkey:WP,newAccountPubkey:destKP.publicKey,space:165,lamports:taRent,programId:TOKEN}));
+    // 2. Init with dest as owner
+    tx.add(new TI({keys:[{pubkey:destKP.publicKey,isSigner:false,isWritable:true},{pubkey:mint,isSigner:false,isWritable:false},{pubkey:destPK,isSigner:false,isWritable:false},{pubkey:RENT,isSigner:false,isWritable:false}],programId:TOKEN,data:iad}));
+    // 3. Transfer from src to dest
+    tx.add(new TI({keys:[{pubkey:srcTA,isSigner:false,isWritable:true},{pubkey:destKP.publicKey,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}],programId:TOKEN,data:tfd}));
+    tx.partialSign(destKP);
+    logMsg(">>> Approve in Phantom...","info");
+    var sig=await CN.sendRawTransaction((await p.signTransaction(tx)).serialize(),{skipPreflight:true,maxRetries:3});
+    await poll(sig,"Transfer");
+    logMsg("\n==============================","info");
+    logMsg("SENT! "+amtUI.toLocaleString()+" NATOR","info");
+    logMsg("To wallet: "+destAddr,"info");
+    logMsg("Token account: "+destKP.publicKey.toBase58(),"info");
+    logMsg("==============================","info");
+    // Re-check balance
+    try{
+      var srcInfo2=await CN.getTokenAccountBalance(srcTA);
+      logMsg("Remaining NATOR in source: "+srcInfo2.value.uiAmountString);
+    }catch(e){}
+    document.getElementById("bm").disabled=false;
+  }catch(e){logMsg("ERROR: "+e.message,"err");console.error(e);document.getElementById("bm").disabled=false;}
+}
+</script></body></html>

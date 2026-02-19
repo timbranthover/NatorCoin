@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html><head><title>NATOR Final Mint</title>
+<script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+<style>
+body{font-family:monospace;background:#111;color:#0f0;padding:20px;max-width:960px}
+button{background:#0f0;color:#111;border:none;padding:12px 24px;font-size:16px;cursor:pointer;margin:8px 4px;font-weight:bold;border-radius:4px}
+button:disabled{background:#444;color:#888;cursor:not-allowed}
+#log{white-space:pre-wrap;margin-top:16px;border:1px solid #0f0;padding:12px;min-height:300px;background:#0a0a0a;font-size:13px;line-height:1.5}
+.ok{color:#0f0}.err{color:#f55}.info{color:#ff0}.hi{color:#0ff}
+h2{color:#0ff;margin-bottom:4px}
+img{max-width:100px;border:2px solid #0f0;display:inline-block;vertical-align:middle;margin-right:12px}
+</style></head><body>
+<h2>🐸 NATOR - Final Clean Mint</h2>
+<div><img src="https://files.catbox.moe/ik1u71.jpg"/><span style="color:#ff0">100,000,000 NATOR &bull; 9 decimals &bull; Fixed supply</span></div>
+<p>Phone wallet (gets 10M): <b style="color:#0ff">AzZrpNs9K4iW265XgQPgZWdoZaB42KyRxUamSmAGH8Gy</b></p>
+<p>Wallet: <b id="w">not connected</b> | SOL: <b id="b">-</b></p>
+<button id="bc" onclick="doConnect()">1. Connect Phantom</button>
+<button id="bm" onclick="doMint()" disabled>2. MINT NATOR (5 approvals)</button>
+<div id="log"><span class="ok">Ready. Connect your Phantom wallet to begin.</span>
+</div>
+<script>
+var WP, CN;
+var PHONE = "AzZrpNs9K4iW265XgQPgZWdoZaB42KyRxUamSmAGH8Gy";
+var RPC = "https://solana-rpc.publicnode.com";
+
+function log(m,c){
+  var d=document.getElementById("log");
+  var s=document.createElement("span");
+  s.className=c||"ok";
+  s.textContent=m+"\n";
+  d.appendChild(s);
+  d.scrollTop=d.scrollHeight;
+}
+
+async function doConnect(){
+  try{
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    if(!p){log("No Phantom found!","err");return;}
+    var r=await p.connect();
+    WP=r.publicKey;
+    CN=new solanaWeb3.Connection(RPC,"confirmed");
+    var bal=await CN.getBalance(WP);
+    document.getElementById("w").textContent=WP.toBase58();
+    document.getElementById("b").textContent=(bal/1e9).toFixed(4)+" SOL";
+    log("Connected: "+WP.toBase58(),"hi");
+    log("Balance: "+(bal/1e9).toFixed(6)+" SOL");
+    if(bal < 10000000) log("WARNING: Low SOL balance! Need at least 0.01 SOL","err");
+    document.getElementById("bm").disabled=false;
+    document.getElementById("bc").disabled=true;
+  }catch(e){log("Connect error: "+e.message,"err");}
+}
+
+async function poll(sig,label){
+  log("  TX: https://solscan.io/tx/"+sig);
+  var start=Date.now();
+  while(Date.now()-start<120000){
+    var st=await CN.getSignatureStatuses([sig],{searchTransactionHistory:true});
+    if(st&&st.value[0]){
+      if(st.value[0].err) throw new Error("Failed: "+JSON.stringify(st.value[0].err));
+      var cs=st.value[0].confirmationStatus;
+      if(cs==="confirmed"||cs==="finalized"){ log("  ✓ Confirmed: "+label,"hi"); return sig; }
+    }
+    await new Promise(r=>setTimeout(r,2500));
+  }
+  throw new Error("Timeout on "+label);
+}
+
+async function send(tx, label){
+  log("  Sending "+label+"...","info");
+  var sig=await CN.sendRawTransaction(tx.serialize(),{skipPreflight:true,maxRetries:5});
+  return poll(sig, label);
+}
+
+async function doMint(){
+  document.getElementById("bm").disabled=true;
+  try{
+    var PK=solanaWeb3.PublicKey, KP=solanaWeb3.Keypair, TX=solanaWeb3.Transaction,
+        SP=solanaWeb3.SystemProgram, TI=solanaWeb3.TransactionInstruction;
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    var TOKEN = new PK("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    var META  = new PK("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+    var RENT  = new PK("SysvarRent111111111111111111111111111111111");
+    var SYS   = new PK("11111111111111111111111111111111");
+    var phonePK = new PK(PHONE);
+
+    // Generate fresh mint keypair
+    var mkp = KP.generate();
+    var mint = mkp.publicKey;
+    log("\n=== STEP 1: Create Mint ===","info");
+    log("  Mint address: "+mint.toBase58(),"hi");
+
+    var mintRent = await CN.getMinimumBalanceForRentExemption(82);
+    var taRent   = await CN.getMinimumBalanceForRentExemption(165);
+    log("  Mint rent: "+(mintRent/1e9).toFixed(6)+" SOL");
+
+    // --- TX1: Create + Init Mint ---
+    log("  >>> Approve TX1 in Phantom (create mint)...","info");
+    var initMintData = new Uint8Array(35);
+    initMintData[0]=0; initMintData[1]=9;
+    var wpBytes=WP.toBytes();
+    for(var i=0;i<32;i++) initMintData[2+i]=wpBytes[i];
+    initMintData[34]=0;
+    var bh1=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var t1=new TX({recentBlockhash:bh1,feePayer:WP});
+    t1.add(SP.createAccount({fromPubkey:WP,newAccountPubkey:mint,space:82,lamports:mintRent,programId:TOKEN}));
+    t1.add(new TI({keys:[{pubkey:mint,isSigner:false,isWritable:true},{pubkey:RENT,isSigner:false,isWritable:false}],programId:TOKEN,data:initMintData}));
+    t1.partialSign(mkp);
+    await send(await p.signTransaction(t1), "TX1 Create Mint");
+
+    // --- TX2: Metadata ---
+    log("\n=== STEP 2: Create Metadata ===","info");
+    log("  >>> Approve TX2 in Phantom (metadata)...","info");
+    var mpda=PK.findProgramAddressSync([new TextEncoder().encode("metadata"),META.toBytes(),mint.toBytes()],META)[0];
+    log("  Meta PDA: "+mpda.toBase58());
+    function encStr(s){var b=new TextEncoder().encode(s),o=new Uint8Array(4+b.length),dv=new DataView(o.buffer);dv.setUint32(0,b.length,true);o.set(b,4);return o;}
+    var nb=encStr("NATOR"),sb=encStr("NATOR"),ub=encStr("https://files.catbox.moe/9q60bc.json");
+    var mdLen=1+nb.length+sb.length+ub.length+7, md=new Uint8Array(mdLen), off=0;
+    md[off++]=33;
+    md.set(nb,off);off+=nb.length;
+    md.set(sb,off);off+=sb.length;
+    md.set(ub,off);off+=ub.length;
+    md[off++]=0;md[off++]=0;md[off++]=0;md[off++]=0;md[off++]=0;md[off++]=1;md[off++]=0;
+    var bh2=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var t2=new TX({recentBlockhash:bh2,feePayer:WP});
+    t2.add(new TI({keys:[{pubkey:mpda,isSigner:false,isWritable:true},{pubkey:mint,isSigner:false,isWritable:false},{pubkey:WP,isSigner:true,isWritable:false},{pubkey:WP,isSigner:true,isWritable:true},{pubkey:WP,isSigner:false,isWritable:false},{pubkey:SYS,isSigner:false,isWritable:false},{pubkey:RENT,isSigner:false,isWritable:false}],programId:META,data:md}));
+    await send(await p.signTransaction(t2), "TX2 Metadata");
+
+    // --- TX3: Create YOUR token account + mint all 100M to it ---
+    log("\n=== STEP 3: Create Your Token Account + Mint 100M ===","info");
+    log("  >>> Approve TX3 in Phantom (mint 100M to your wallet)...","info");
+    var yourTA = KP.generate(); // token account owned by YOUR wallet
+    log("  Your token account: "+yourTA.publicKey.toBase58(),"hi");
+    var initAcctData = new Uint8Array(1); initAcctData[0]=1;
+    var mintToData = new Uint8Array(9); mintToData[0]=7;
+    new DataView(mintToData.buffer).setBigUint64(1,BigInt("100000000000000000"),true);
+    var bh3=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var t3=new TX({recentBlockhash:bh3,feePayer:WP});
+    // Create token account
+    t3.add(SP.createAccount({fromPubkey:WP,newAccountPubkey:yourTA.publicKey,space:165,lamports:taRent,programId:TOKEN}));
+    // Init with YOUR wallet as owner
+    t3.add(new TI({keys:[{pubkey:yourTA.publicKey,isSigner:false,isWritable:true},{pubkey:mint,isSigner:false,isWritable:false},{pubkey:WP,isSigner:false,isWritable:false},{pubkey:RENT,isSigner:false,isWritable:false}],programId:TOKEN,data:initAcctData}));
+    // Mint 100M into it
+    t3.add(new TI({keys:[{pubkey:mint,isSigner:false,isWritable:true},{pubkey:yourTA.publicKey,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}],programId:TOKEN,data:mintToData}));
+    t3.partialSign(yourTA);
+    await send(await p.signTransaction(t3), "TX3 Mint 100M");
+
+    // Verify balance
+    try{
+      var bal3=await CN.getTokenAccountBalance(yourTA.publicKey);
+      log("  ✓ Your NATOR balance: "+bal3.value.uiAmountString,"hi");
+    }catch(e){ log("  (balance check: "+e.message+")","err"); }
+
+    // --- TX4: Send 10M to phone wallet ---
+    log("\n=== STEP 4: Send 10M NATOR to Phone Wallet ===","info");
+    log("  >>> Approve TX4 in Phantom (send 10M to phone)...","info");
+    var phoneTA = KP.generate();
+    log("  Phone token account: "+phoneTA.publicKey.toBase58(),"hi");
+    var transferData = new Uint8Array(9); transferData[0]=3;
+    new DataView(transferData.buffer).setBigUint64(1,BigInt("10000000000000000"),true); // 10M
+    var bh4=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var t4=new TX({recentBlockhash:bh4,feePayer:WP});
+    // Create phone token account
+    t4.add(SP.createAccount({fromPubkey:WP,newAccountPubkey:phoneTA.publicKey,space:165,lamports:taRent,programId:TOKEN}));
+    // Init with PHONE wallet as owner
+    t4.add(new TI({keys:[{pubkey:phoneTA.publicKey,isSigner:false,isWritable:true},{pubkey:mint,isSigner:false,isWritable:false},{pubkey:phonePK,isSigner:false,isWritable:false},{pubkey:RENT,isSigner:false,isWritable:false}],programId:TOKEN,data:initAcctData}));
+    // Transfer 10M from your TA to phone TA
+    t4.add(new TI({keys:[{pubkey:yourTA.publicKey,isSigner:false,isWritable:true},{pubkey:phoneTA.publicKey,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}],programId:TOKEN,data:transferData}));
+    t4.partialSign(phoneTA);
+    await send(await p.signTransaction(t4), "TX4 Send 10M to Phone");
+
+    // --- TX5: Revoke mint authority (fixed supply forever) ---
+    log("\n=== STEP 5: Revoke Mint Authority ===","info");
+    log("  >>> Approve TX5 in Phantom (lock supply forever)...","info");
+    var revokeData = new Uint8Array(3); revokeData[0]=6; revokeData[1]=0; revokeData[2]=0;
+    var bh5=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var t5=new TX({recentBlockhash:bh5,feePayer:WP});
+    t5.add(new TI({keys:[{pubkey:mint,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}],programId:TOKEN,data:revokeData}));
+    await send(await p.signTransaction(t5), "TX5 Revoke Mint Auth");
+
+    // Final balance
+    var finalBal=await CN.getBalance(WP);
+    document.getElementById("b").textContent=(finalBal/1e9).toFixed(4)+" SOL";
+
+    log("\n╔═══════════════════════════════════╗","hi");
+    log("║   🐸 NATOR IS LIVE ON SOLANA! 🐸  ║","hi");
+    log("╚═══════════════════════════════════╝","hi");
+    log("Mint:      "+mint.toBase58(),"hi");
+    log("Supply:    100,000,000 NATOR (fixed)","hi");
+    log("Your TA:   "+yourTA.publicKey.toBase58(),"hi");
+    log("Phone TA:  "+phoneTA.publicKey.toBase58(),"hi");
+    log("You hold:  90,000,000 NATOR","hi");
+    log("Phone:     10,000,000 NATOR","hi");
+    log("Image:     https://files.catbox.moe/ik1u71.jpg","hi");
+    log("Solscan:   https://solscan.io/token/"+mint.toBase58(),"hi");
+    log("SOL left:  "+(finalBal/1e9).toFixed(6),"hi");
+    log("\nTo see in Phantom: Manage tokens > Add custom token > paste mint address","info");
+
+  }catch(e){
+    log("\nERROR: "+e.message,"err");
+    console.error(e);
+    document.getElementById("bm").disabled=false;
+  }
+}
+</script></body></html>

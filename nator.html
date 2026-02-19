@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html><head><title>NATOR Minter</title>
+<script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+<style>
+body{font-family:monospace;background:#111;color:#0f0;padding:20px;max-width:900px}
+button{background:#0f0;color:#111;border:none;padding:12px 24px;font-size:16px;cursor:pointer;margin:8px 0;display:block;font-weight:bold;border-radius:4px}
+button:disabled{background:#555;color:#999}
+#log{white-space:pre-wrap;margin-top:20px;border:1px solid #0f0;padding:12px;min-height:200px;background:#0a0a0a;font-size:13px}
+.ok{color:#0f0}.err{color:#f55}.info{color:#ff0}h2{color:#0ff}
+</style></head><body>
+<h2>NATOR Token Creator - Raw Chain (~0.01 SOL)</h2>
+<p>Wallet: <b id="w">not connected</b> | Balance: <b id="b">-</b></p>
+<button id="bc" onclick="doConnect()">1. Connect Phantom</button>
+<button id="bm" onclick="doMint()" disabled>2. CREATE NATOR (4 approvals)</button>
+<div id="log">Ready...
+</div>
+<script>
+var WP, CN;
+function logMsg(m,c){var d=document.getElementById("log");var s=document.createElement("span");s.className=c||"ok";s.textContent=m+"\n";d.appendChild(s);d.scrollTop=d.scrollHeight;}
+async function doConnect(){
+  try{
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    if(!p){logMsg("No Phantom found!","err");return;}
+    var r=await p.connect();
+    WP=r.publicKey;
+    CN=new solanaWeb3.Connection("https://mainnet.helius-rpc.com/?api-key=demo","confirmed");
+    var bal=await CN.getBalance(WP);
+    document.getElementById("w").textContent=WP.toBase58();
+    document.getElementById("b").textContent=(bal/1e9).toFixed(6)+" SOL";
+    logMsg("Connected: "+WP.toBase58());
+    logMsg("Balance: "+(bal/1e9).toFixed(6)+" SOL");
+    document.getElementById("bm").disabled=false;
+    document.getElementById("bc").disabled=true;
+  }catch(e){logMsg("Error: "+e.message,"err");}
+}
+async function sendConfirm(signed,label){
+  logMsg("Sending "+label+"...");
+  var sig=await CN.sendRawTransaction(signed.serialize(),{skipPreflight:true});
+  logMsg("TX: https://solscan.io/tx/"+sig);
+  await CN.confirmTransaction(sig,"confirmed");
+  logMsg("Confirmed: "+label);
+  return sig;
+}
+async function doMint(){
+  document.getElementById("bm").disabled=true;
+  try{
+    var PK=solanaWeb3.PublicKey,KP=solanaWeb3.Keypair,TX=solanaWeb3.Transaction,SP=solanaWeb3.SystemProgram,TI=solanaWeb3.TransactionInstruction;
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    var TOKEN=new PK("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    var ASSOC=new PK("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bRS");
+    var META=new PK("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+    var RENT=new PK("SysvarRent111111111111111111111111111111111");
+    var SYS=new PK("11111111111111111111111111111111");
+    var mkp=KP.generate(),mint=mkp.publicKey;
+    logMsg("\nMint: "+mint.toBase58(),"info");
+    var rent=await CN.getMinimumBalanceForRentExemption(82);
+    logMsg("Rent: "+(rent/1e9).toFixed(6)+" SOL");
+    logMsg("\n=== TX1: Create Mint ===","info");
+    var d1=new Uint8Array(35);d1[0]=0;d1[1]=9;
+    var wb=WP.toBytes();for(var i=0;i<32;i++)d1[2+i]=wb[i];d1[34]=0;
+    var bh1=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var t1=new TX({recentBlockhash:bh1,feePayer:WP});
+    t1.add(SP.createAccount({fromPubkey:WP,newAccountPubkey:mint,space:82,lamports:rent,programId:TOKEN}));
+    t1.add(new TI({keys:[{pubkey:mint,isSigner:false,isWritable:true},{pubkey:RENT,isSigner:false,isWritable:false}],programId:TOKEN,data:d1}));
+    t1.partialSign(mkp);
+    logMsg(">>> Approve TX1 in Phantom...","info");
+    await sendConfirm(await p.signTransaction(t1),"TX1");
+    logMsg("\n=== TX2: Metadata ===","info");
+    var mpda=PK.findProgramAddressSync([new TextEncoder().encode("metadata"),META.toBytes(),mint.toBytes()],META)[0];
+    logMsg("Meta PDA: "+mpda.toBase58());
+    function encStr(s){var b=new TextEncoder().encode(s),o=new Uint8Array(4+b.length),dv=new DataView(o.buffer);dv.setUint32(0,b.length,true);o.set(b,4);return o;}
+    var nb=encStr("NATOR"),sb=encStr("NATOR"),ub=encStr("https://arweave.net/nator-placeholder");
+    var mdLen=1+nb.length+sb.length+ub.length+7,md=new Uint8Array(mdLen),off=0;
+    md[off++]=33;md.set(nb,off);off+=nb.length;md.set(sb,off);off+=sb.length;md.set(ub,off);off+=ub.length;
+    md[off++]=0;md[off++]=0;md[off++]=0;md[off++]=0;md[off++]=0;md[off++]=1;md[off++]=0;
+    var bh2=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var t2=new TX({recentBlockhash:bh2,feePayer:WP});
+    t2.add(new TI({keys:[{pubkey:mpda,isSigner:false,isWritable:true},{pubkey:mint,isSigner:false,isWritable:false},{pubkey:WP,isSigner:true,isWritable:false},{pubkey:WP,isSigner:true,isWritable:true},{pubkey:WP,isSigner:false,isWritable:false},{pubkey:SYS,isSigner:false,isWritable:false},{pubkey:RENT,isSigner:false,isWritable:false}],programId:META,data:md}));
+    logMsg(">>> Approve TX2 in Phantom...","info");
+    await sendConfirm(await p.signTransaction(t2),"TX2");
+    logMsg("
+=== TX3: Token Acct + Mint 100M ===","info");
+    var taKP=KP.generate();
+    var taRent=await CN.getMinimumBalanceForRentExemption(165);
+    logMsg("Token acct: "+taKP.publicKey.toBase58());
+    var mtd=new Uint8Array(9);mtd[0]=7;
+    new DataView(mtd.buffer).setBigUint64(1,BigInt("100000000000000000"),true);
+    var iad=new Uint8Array(1);iad[0]=1;
+    var bh3=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var t3=new TX({recentBlockhash:bh3,feePayer:WP});
+    t3.add(SP.createAccount({fromPubkey:WP,newAccountPubkey:taKP.publicKey,space:165,lamports:taRent,programId:TOKEN}));
+    t3.add(new TI({keys:[{pubkey:taKP.publicKey,isSigner:false,isWritable:true},{pubkey:mint,isSigner:false,isWritable:false},{pubkey:WP,isSigner:false,isWritable:false},{pubkey:RENT,isSigner:false,isWritable:false}],programId:TOKEN,data:iad}));
+    t3.add(new TI({keys:[{pubkey:mint,isSigner:false,isWritable:true},{pubkey:taKP.publicKey,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}],programId:TOKEN,data:mtd}));
+    t3.partialSign(taKP);
+    logMsg(">>> Approve TX3 in Phantom...","info");
+    await sendConfirm(await p.signTransaction(t3),"TX3");
+    logMsg("\n=== TX4: Revoke Mint Auth ===","info");
+    var rd=new Uint8Array(3);rd[0]=6;rd[1]=0;rd[2]=0;
+    var bh4=(await CN.getLatestBlockhash("finalized")).blockhash;
+    var t4=new TX({recentBlockhash:bh4,feePayer:WP});
+    t4.add(new TI({keys:[{pubkey:mint,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}],programId:TOKEN,data:rd}));
+    logMsg(">>> Approve TX4 in Phantom...","info");
+    await sendConfirm(await p.signTransaction(t4),"TX4");
+    var fb=await CN.getBalance(WP);
+    document.getElementById("b").textContent=(fb/1e9).toFixed(6)+" SOL";
+    logMsg("\n=============================","info");
+    logMsg("  NATOR IS LIVE ON SOLANA!  ","info");
+    logMsg("=============================","info");
+    logMsg("Mint:    "+mint.toBase58(),"info");
+    logMsg("Supply:  100,000,000 NATOR","info");
+    logMsg("Auth:    REVOKED forever","info");
+    logMsg("View:    https://solscan.io/token/"+mint.toBase58(),"info");
+    logMsg("SOL left: "+(fb/1e9).toFixed(6),"info");
+  }catch(e){logMsg("ERROR: "+e.message,"err");console.error(e);document.getElementById("bm").disabled=false;}
+}
+</script></body></html>
