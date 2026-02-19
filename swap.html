@@ -20,12 +20,12 @@ input[type=text],input[type=number],select{
 }
 input:focus,select:focus{border-color:#ffb000;box-shadow:0 0 6px rgba(255,176,0,0.3)}
 input::placeholder{color:#4a3200}
-/* Amber dropdown — kill OS blue hover */
+/* Dropdown — dark, no highlight */
 select{cursor:pointer;color-scheme:dark}
 select option{background:#0d0900;color:#ffb000}
-select option:hover,select option:focus,select option:checked{
-  background:#3a2000;color:#ffb000;
-  background:linear-gradient(#3a2000,#3a2000); /* webkit hack */
+select option:hover,select option:focus,select option:checked,select option:active{
+  background:#0d0900 !important;color:#ffb000 !important;
+  background:linear-gradient(#0d0900,#0d0900) !important;
 }
 button{
   background:#0d0900;color:#ffb000;border:1px solid #ffb000;
@@ -64,13 +64,13 @@ button:disabled{border-color:#3a2800;color:#3a2800;cursor:not-allowed}
 .ok{color:#ffb000}.err{color:#ff3300}.info{color:#ff6a00}.hi{color:#fff59d}.dim{color:#7a5200}.green{color:#00ff88}
 a{color:#ff6a00;text-decoration:none}
 a:hover{text-decoration:underline}
-/* Nav — HOME leftmost */
+/* Nav — HOME leftmost, plain text */
 .nav{margin-bottom:16px;font-size:11px;display:flex;align-items:center;gap:0}
 .nav a{color:#7a5200;text-decoration:none;letter-spacing:1px;text-transform:uppercase;
-  background:#0d0900;border:1px solid #3a2000;padding:4px 10px;margin-right:4px;transition:color 0.1s,background 0.1s}
-.nav a:hover{color:#ffb000;background:#1a0e00;border-color:#7a5200}
-.nav a.nav-home{color:#c87800;border-color:#7a5200}
-.nav a.nav-home:hover{color:#ffb000;background:#2a1500;border-color:#ffb000}
+  padding:4px 10px;margin-right:2px;transition:color 0.1s}
+.nav a:hover{color:#ffb000}
+.nav a.nav-home{color:#c87800}
+.nav a.nav-home:hover{color:#ffb000}
 
 /* ── Mobile responsive ────────────────────────────────── */
 @media(max-width:600px){
@@ -88,7 +88,7 @@ a:hover{text-decoration:underline}
   .stat-row{flex-wrap:wrap}
   .stat-val{min-width:0;word-break:break-all;font-size:12px}
   #log{font-size:12px;min-height:140px;max-height:260px}
-  .nav a{padding:5px 9px;font-size:11px}
+  .nav a{padding:4px 8px;font-size:11px}
   .swap-arrow{font-size:22px;margin:14px 0}
 }
 </style></head><body>
@@ -163,7 +163,7 @@ a:hover{text-decoration:underline}
 
 <div id="log"><span class="dim">SWAP TERMINAL v2.1
 ================================
-Powered by Jupiter Lite API (lite-api.jup.ag)
+Powered by Jupiter (public.jupiterapi.com)
 Connect wallet → select tokens → GET QUOTE → EXECUTE SWAP
 <span style="display:inline;animation:blink 1s step-end infinite">_</span></span>
 </div>
@@ -171,8 +171,8 @@ Connect wallet → select tokens → GET QUOTE → EXECUTE SWAP
 <script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
 <script>
 // ── Constants ─────────────────────────────────────────────────────
-var JUP_QUOTE = "https://lite-api.jup.ag/swap/v1/quote";
-var JUP_SWAP  = "https://lite-api.jup.ag/swap/v1/swap";
+var JUP_QUOTE = "https://public.jupiterapi.com/quote";
+var JUP_SWAP  = "https://public.jupiterapi.com/swap";
 var RPCS = ["https://api.mainnet-beta.solana.com","https://solana-rpc.publicnode.com"];
 
 var SOL_MINT  = "So11111111111111111111111111111111111111112";
@@ -220,7 +220,7 @@ async function rpcFetch(method,params){
 // Warm up Jupiter API connection immediately on page load (no-op fetch to open TCP/TLS)
 function warmJupiter(){
   // Fire-and-forget: tiny preflight quote (1 lamport SOL→USDC) to establish connection
-  fetch(JUP_QUOTE+"?inputMint="+SOL_MINT+"&outputMint="+USDC_MINT+"&amount=1&slippageBps=50&swapMode=ExactIn")
+  fetch(JUP_QUOTE+"?inputMint="+SOL_MINT+"&outputMint="+USDC_MINT+"&amount=100000000&slippageBps=50")
     .catch(function(){});
 }
 
