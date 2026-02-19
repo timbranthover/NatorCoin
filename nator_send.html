@@ -116,7 +116,7 @@ a:hover{text-decoration:underline}
     <button onclick="setPct(100)">MAX</button>
   </div>
 
-  <button id="bm" onclick="doTransfer()" disabled>&#9660; EXECUTE TRANSFER</button>
+  <button id="bm" onclick="doTransfer()">&#9660; EXECUTE TRANSFER</button>
   <button onclick="clearLog()" style="border-color:#3a2800;color:#7a5200">CLR LOG</button>
 </div>
 
@@ -301,4 +301,15 @@ async function doTransfer(){
   }
   document.getElementById("bm").disabled = false;
 }
+
+// Auto-connect if Phantom already has permission (silent, no popup)
+window.addEventListener("load", async function(){
+  try{
+    var p = window.solana || (window.phantom && window.phantom.solana);
+    if(p && p.isConnected){
+      log("Auto-connecting (already authorized)...","dim");
+      await doConnect();
+    }
+  }catch(e){}
+});
 </script></body></html>
