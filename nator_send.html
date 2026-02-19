@@ -129,7 +129,8 @@ Awaiting wallet connection...
 <script>
 var WP, CN, NATOR_BAL = 0;
 var MINT = "2VwjCeAc1iZpefKHNj43t1MpNcyr9CsGYtM3FbXSGG9v";
-var RPC  = "https://api.mainnet-beta.solana.com";
+var WRONG_WALLET = "EM864eEkcJT8o6JBnodayH71ZdqmRHpDBPZWsoX8WvVu"; // embedded Claude wallet — not yours
+var RPCS = ["https://api.mainnet-beta.solana.com","https://solana-rpc.publicnode.com"];
 
 function log(m, c){
   var d = document.getElementById("log");
@@ -161,8 +162,25 @@ async function doConnect(){
     log("Connecting to Phantom...","info");
     var r = await p.connect();
     WP = r.publicKey;
-    CN = new solanaWeb3.Connection(RPC, "confirmed");
-    var bal = await CN.getBalance(WP);
+    // Warn if wrong wallet connected
+    if(WP.toBase58() === WRONG_WALLET){
+      log("WRONG WALLET CONNECTED!","err");
+      log("You connected the Brant_Claude embedded wallet, not your personal Phantom.","err");
+      log("Switch accounts in Phantom (top of the extension) to your personal wallet, then reconnect.","info");
+      document.getElementById("bc").disabled = false;
+      return;
+    }
+    // Try RPCs in order
+    var bal = null;
+    for(var i=0; i<RPCS.length; i++){
+      try{
+        CN = new solanaWeb3.Connection(RPCS[i], "confirmed");
+        bal = await CN.getBalance(WP);
+        log("RPC: " + RPCS[i],"dim");
+        break;
+      }catch(re){ log("RPC "+RPCS[i]+" failed, trying next...","dim"); }
+    }
+    if(bal === null){ log("ERROR: All RPCs failed. Try again in a moment.","err"); return; }
     document.getElementById("w").textContent = WP.toBase58().slice(0,8)+"..."+WP.toBase58().slice(-6);
     document.getElementById("b").textContent = (bal/1e9).toFixed(4) + " SOL";
     log("CONNECTED: " + WP.toBase58(), "hi");
