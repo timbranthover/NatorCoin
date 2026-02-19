@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html><head><title>SOLANA // TRANSFER TERMINAL</title>
+<script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Courier New",Courier,monospace;background:#0a0700;color:#ffb000;padding:24px;max-width:900px;font-size:13px;line-height:1.6}
+::selection{background:#ffb000;color:#0a0700}
+body::before{content:"";position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.08) 2px,rgba(0,0,0,0.08) 4px);pointer-events:none;z-index:9999}
+h1{color:#ffb000;font-size:18px;letter-spacing:4px;text-transform:uppercase;border-bottom:1px solid #ffb000;padding-bottom:8px;margin-bottom:20px}
+h1 span{color:#ff6a00}
+.block{border:1px solid #7a5200;padding:14px;margin-bottom:16px;background:#0d0900}
+.block-title{color:#ff6a00;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px}
+.stat-row{display:flex;justify-content:space-between;margin:4px 0;color:#c87800}
+.stat-val{color:#ffb000;font-weight:bold}
+label{display:block;color:#c87800;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;margin-top:10px}
+input[type=text],input[type=number],select{
+  background:#0d0900;color:#ffb000;border:1px solid #7a5200;
+  padding:8px 10px;width:100%;font-family:"Courier New",Courier,monospace;
+  font-size:13px;outline:none;appearance:none;-webkit-appearance:none;
+}
+input:focus,select:focus{border-color:#ffb000;box-shadow:0 0 6px rgba(255,176,0,0.3)}
+input::placeholder{color:#4a3200}
+select option{background:#0d0900;color:#ffb000}
+select{cursor:pointer}
+button{
+  background:#0d0900;color:#ffb000;border:1px solid #ffb000;
+  padding:10px 22px;font-family:"Courier New",Courier,monospace;
+  font-size:13px;letter-spacing:2px;text-transform:uppercase;
+  cursor:pointer;margin-top:12px;margin-right:8px;transition:background 0.1s,color 0.1s;
+}
+button:hover:not(:disabled){background:#ffb000;color:#0a0700}
+button:disabled{border-color:#3a2800;color:#3a2800;cursor:not-allowed}
+.btn-connect{border-color:#ff6a00;color:#ff6a00}
+.btn-connect:hover:not(:disabled){background:#ff6a00;color:#0a0700}
+#log{white-space:pre-wrap;margin-top:16px;border:1px solid #7a5200;padding:14px;
+  min-height:220px;max-height:400px;overflow-y:auto;background:#060400;font-size:12px;line-height:1.7}
+#log::-webkit-scrollbar{width:6px}
+#log::-webkit-scrollbar-track{background:#0d0900}
+#log::-webkit-scrollbar-thumb{background:#7a5200}
+.ok{color:#ffb000}.err{color:#ff3300}.info{color:#ff6a00}.hi{color:#fff59d}.dim{color:#7a5200}
+.blink{animation:blink 1s step-end infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+a{color:#ff6a00;text-decoration:none}
+a:hover{text-decoration:underline}
+.pct-btns{display:flex;gap:4px;margin-top:4px}
+.pct-btns button{margin:0;padding:5px 10px;font-size:11px;border-color:#7a5200;color:#c87800}
+.pct-btns button:hover{background:#7a5200;color:#ffb000}
+.token-row{display:flex;justify-content:space-between;font-size:11px;color:#7a5200;margin-top:6px}
+</style></head><body>
+
+<h1>&#9608; SOLANA <span>//</span> TRANSFER TERMINAL &#9608;</h1>
+
+<div class="block">
+  <div class="block-title">&#9632; System Status</div>
+  <div class="stat-row"><span>WALLET</span><span class="stat-val" id="w">NOT CONNECTED</span></div>
+  <div class="stat-row"><span>SOL BALANCE</span><span class="stat-val" id="b">--</span></div>
+  <div class="stat-row"><span>NETWORK</span><span class="stat-val">SOLANA MAINNET</span></div>
+  <button class="btn-connect" id="bc" onclick="doConnect()">&#9655; CONNECT PHANTOM</button>
+</div>
+
+<div class="block">
+  <div class="block-title">&#9632; Select Token</div>
+  <label>Token to Send</label>
+  <select id="tokenSel" onchange="onTokenChange()">
+    <option value="">-- connect wallet to load tokens --</option>
+  </select>
+  <div class="token-row">
+    <span id="mintLabel"></span>
+    <span id="balLabel"></span>
+  </div>
+</div>
+
+<div class="block">
+  <div class="block-title">&#9632; Transfer Parameters</div>
+  <label>Destination Wallet Address</label>
+  <input id="dest" type="text" placeholder="Enter recipient's Solana wallet address..."/>
+  <label>Amount</label>
+  <input id="amt" type="number" value="" min="0" placeholder="Amount to send"/>
+  <div class="pct-btns">
+    <button onclick="setPct(10)">10%</button>
+    <button onclick="setPct(25)">25%</button>
+    <button onclick="setPct(50)">50%</button>
+    <button onclick="setPct(100)">MAX</button>
+  </div>
+  <button id="bm" onclick="doTransfer()">&#9660; EXECUTE TRANSFER</button>
+  <button onclick="clearLog()" style="border-color:#3a2800;color:#7a5200">CLR LOG</button>
+</div>
+
+<div id="log"><span class="dim">SOLANA TRANSFER TERMINAL v1.0
+================================
+Connect any Phantom wallet to begin.
+Supports SOL + any SPL token.
+<span class="blink">_</span></span>
+</div>
+
+<script>
+var WP, ACTIVE_RPC, CONNECTING = false;
+var TOKENS = []; // [{label, mint, decimals, balance, srcTA}]
+var RPCS = ["https://solana-rpc.publicnode.com","https://api.mainnet-beta.solana.com"];
+var KNOWN = {"2VwjCeAc1iZpefKHNj43t1MpNcyr9CsGYtM3FbXSGG9v":"NATOR"};
+
+function log(m,c){
+  var d=document.getElementById("log");
+  var s=document.createElement("span");
+  s.className=c||"ok";s.innerHTML=m+"\n";
+  d.appendChild(s);d.scrollTop=d.scrollHeight;
+}
+function clearLog(){document.getElementById("log").innerHTML='<span class="dim">LOG CLEARED.\n_</span>';}
+
+// ── Raw RPC helpers ──────────────────────────────────────────────
+async function rpc(method, params){
+  var body = JSON.stringify({jsonrpc:"2.0",id:1,method:method,params:params});
+  var last;
+  for(var i=0;i<RPCS.length;i++){
+    try{
+      var r = await fetch(RPCS[i],{method:"POST",headers:{"Content-Type":"application/json"},body:body});
+      var j = await r.json();
+      if(j.error) throw new Error(j.error.message||JSON.stringify(j.error));
+      ACTIVE_RPC = RPCS[i];
+      return j.result;
+    }catch(e){ last=e; }
+  }
+  throw last||new Error("All RPCs failed");
+}
+
+async function getBalance(addr){
+  return (await rpc("getBalance",[addr])).value;
+}
+async function getLatestBlockhash(){
+  return (await rpc("getLatestBlockhash",[{commitment:"finalized"}])).value.blockhash;
+}
+async function getRentExemption(size){
+  return await rpc("getMinimumBalanceForRentExemption",[size]);
+}
+async function sendTx(serialized){
+  var b64 = btoa(String.fromCharCode.apply(null,serialized));
+  var res = await rpc("sendTransaction",[b64,{encoding:"base64",skipPreflight:true,maxRetries:5}]);
+  return res; // signature string
+}
+async function getTokenAccounts(addr){
+  var res = await rpc("getTokenAccountsByOwner",[addr,{programId:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},{encoding:"jsonParsed"}]);
+  return res.value;
+}
+async function getSigStatus(sig){
+  var res = await rpc("getSignatureStatuses",[[sig],{searchTransactionHistory:true}]);
+  return res.value[0];
+}
+
+// ── Poll confirmation ────────────────────────────────────────────
+async function poll(sig, label){
+  log('TX: <a href="https://solscan.io/tx/'+sig+'" target="_blank">solscan.io/tx/'+sig.slice(0,20)+'...</a>',"info");
+  var start=Date.now();
+  while(Date.now()-start<120000){
+    try{
+      var st=await getSigStatus(sig);
+      if(st){
+        if(st.err) throw new Error("TX FAILED: "+JSON.stringify(st.err));
+        if(st.confirmationStatus==="confirmed"||st.confirmationStatus==="finalized"){
+          log("  [OK] CONFIRMED: "+label,"hi"); return sig;
+        }
+      }
+    }catch(e){ if(e.message.startsWith("TX FAILED")) throw e; }
+    await new Promise(r=>setTimeout(r,2500));
+  }
+  throw new Error("TIMEOUT: "+label);
+}
+
+// ── Connect ──────────────────────────────────────────────────────
+async function doConnect(){
+  if(CONNECTING) return;
+  CONNECTING=true;
+  try{
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    if(!p){log("ERROR: Phantom not found.","err");CONNECTING=false;return;}
+    log("Connecting to Phantom...","info");
+    var r=await p.connect();
+    WP=r.publicKey;
+    var walletAddr=WP.toBase58();
+    var bal=await getBalance(walletAddr);
+    document.getElementById("w").textContent=walletAddr.slice(0,8)+"..."+walletAddr.slice(-6);
+    document.getElementById("b").textContent=(bal/1e9).toFixed(4)+" SOL";
+    log("CONNECTED: "+walletAddr,"hi");
+    log("SOL: "+(bal/1e9).toFixed(6)+" | RPC: "+ACTIVE_RPC,"dim");
+    document.getElementById("bc").disabled=true;
+    document.getElementById("bc").textContent="&#10003; CONNECTED";
+    await loadTokens(walletAddr, bal);
+  }catch(e){log("CONNECT ERROR: "+e.message,"err");}
+  CONNECTING=false;
+}
+
+// ── Load tokens into dropdown ────────────────────────────────────
+async function loadTokens(walletAddr, solBal){
+  log("Loading tokens...","dim");
+  TOKENS=[];
+  // SOL always first
+  TOKENS.push({label:"SOL", mint:"SOL", decimals:9, balance:solBal/1e9, srcTA:null});
+
+  try{
+    var accts=await getTokenAccounts(walletAddr);
+    for(var i=0;i<accts.length;i++){
+      var info=accts[i].account.data.parsed.info;
+      var mint=info.mint;
+      var bal=parseFloat(info.tokenAmount.uiAmountString||"0");
+      var dec=info.tokenAmount.decimals;
+      var sym=KNOWN[mint]||("Token "+mint.slice(0,6)+"...");
+      TOKENS.push({label:sym, mint:mint, decimals:dec, balance:bal, srcTA:accts[i].pubkey});
+    }
+    log("Loaded "+TOKENS.length+" asset(s).","dim");
+  }catch(e){
+    log("Token load failed (showing SOL only): "+e.message,"dim");
+  }
+
+  // Populate dropdown
+  var sel=document.getElementById("tokenSel");
+  sel.innerHTML="";
+  for(var i=0;i<TOKENS.length;i++){
+    var t=TOKENS[i];
+    var opt=document.createElement("option");
+    opt.value=i;
+    opt.textContent=t.label+" — "+t.balance.toLocaleString()+(t.mint==="SOL"?" SOL":" tokens");
+    sel.appendChild(opt);
+  }
+  onTokenChange();
+}
+
+function onTokenChange(){
+  var sel=document.getElementById("tokenSel");
+  var idx=parseInt(sel.value);
+  if(isNaN(idx)||!TOKENS[idx]){
+    document.getElementById("mintLabel").textContent="";
+    document.getElementById("balLabel").textContent="";
+    return;
+  }
+  var t=TOKENS[idx];
+  document.getElementById("mintLabel").textContent=t.mint==="SOL"?"Native SOL":"MINT: "+t.mint;
+  document.getElementById("balLabel").textContent="BAL: "+t.balance.toLocaleString();
+  document.getElementById("amt").value="";
+}
+
+function getPct(pct){
+  var sel=document.getElementById("tokenSel");
+  var idx=parseInt(sel.value);
+  if(isNaN(idx)||!TOKENS[idx]) return 0;
+  var bal=TOKENS[idx].balance;
+  // For SOL keep a small reserve for fees
+  if(TOKENS[idx].mint==="SOL" && pct===100) bal=Math.max(0,bal-0.002);
+  return parseFloat((bal*pct/100).toFixed(TOKENS[idx].decimals));
+}
+function setPct(pct){
+  var amt=getPct(pct);
+  document.getElementById("amt").value=amt;
+}
+
+// ── Transfer ─────────────────────────────────────────────────────
+async function doTransfer(){
+  var destAddr=document.getElementById("dest").value.trim();
+  var amtUI=parseFloat(document.getElementById("amt").value);
+  var sel=document.getElementById("tokenSel");
+  var idx=parseInt(sel.value);
+
+  if(!destAddr){log("ERROR: Enter a destination wallet address.","err");return;}
+  if(!amtUI||amtUI<=0){log("ERROR: Enter a valid amount.","err");return;}
+  if(!WP){log("ERROR: Connect your Phantom wallet first.","err");return;}
+  if(isNaN(idx)||!TOKENS[idx]){log("ERROR: Select a token to send.","err");return;}
+
+  var token=TOKENS[idx];
+  document.getElementById("bm").disabled=true;
+
+  try{
+    var PK=solanaWeb3.PublicKey, KP=solanaWeb3.Keypair,
+        TX=solanaWeb3.Transaction, SP=solanaWeb3.SystemProgram,
+        TI=solanaWeb3.TransactionInstruction;
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    var TOKEN_PROG=new PK("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    var RENT_SYS=new PK("SysvarRent111111111111111111111111111111111");
+    var destPK=new PK(destAddr);
+
+    log("\n--- INITIATING TRANSFER ---","info");
+    log("TOKEN  : "+token.label);
+    log("AMOUNT : "+amtUI.toLocaleString());
+    log("TO     : "+destAddr);
+
+    var bh=await getLatestBlockhash();
+    var tx=new TX({recentBlockhash:bh,feePayer:WP});
+
+    if(token.mint==="SOL"){
+      // ── SOL transfer ──────────────────────────
+      var lamports=Math.round(amtUI*1e9);
+      tx.add(SP.transfer({fromPubkey:WP,toPubkey:destPK,lamports:lamports}));
+      log(">>> APPROVE IN PHANTOM...","info");
+      var signed=await p.signTransaction(tx);
+      var sig=await sendTx(signed.serialize());
+      await poll(sig,"SOL Transfer");
+
+    } else {
+      // ── SPL token transfer ────────────────────
+      var amtRaw=BigInt(Math.round(amtUI*Math.pow(10,token.decimals)));
+      var srcTA=new PK(token.srcTA);
+      var mintPK=new PK(token.mint);
+
+      // Create fresh destination token account (no ATA lookup needed)
+      var taRent=await getRentExemption(165);
+      var destKP=KP.generate();
+      var destTA=destKP.publicKey;
+      log("DEST TA: "+destTA.toBase58().slice(0,16)+"... (~"+(taRent/1e9).toFixed(4)+" SOL rent)");
+
+      var iad=new Uint8Array(1); iad[0]=1;
+      var tfd=new Uint8Array(9); tfd[0]=3;
+      new DataView(tfd.buffer).setBigUint64(1,amtRaw,true);
+
+      // 1. Create dest token account
+      tx.add(SP.createAccount({fromPubkey:WP,newAccountPubkey:destTA,space:165,lamports:taRent,programId:TOKEN_PROG}));
+      // 2. Init dest token account owned by destPK
+      tx.add(new TI({keys:[{pubkey:destTA,isSigner:false,isWritable:true},{pubkey:mintPK,isSigner:false,isWritable:false},{pubkey:destPK,isSigner:false,isWritable:false},{pubkey:RENT_SYS,isSigner:false,isWritable:false}],programId:TOKEN_PROG,data:iad}));
+      // 3. Transfer tokens
+      tx.add(new TI({keys:[{pubkey:srcTA,isSigner:false,isWritable:true},{pubkey:destTA,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}],programId:TOKEN_PROG,data:tfd}));
+
+      tx.partialSign(destKP);
+      log(">>> APPROVE IN PHANTOM...","info");
+      var signed=await p.signTransaction(tx);
+      var sig=await sendTx(signed.serialize());
+      await poll(sig,token.label+" Transfer");
+
+      // Update local balance
+      TOKENS[idx].balance=Math.max(0,token.balance-amtUI);
+      var opt=sel.options[idx];
+      opt.textContent=token.label+" — "+TOKENS[idx].balance.toLocaleString()+" tokens";
+      document.getElementById("balLabel").textContent="BAL: "+TOKENS[idx].balance.toLocaleString();
+    }
+
+    log("\n================================","hi");
+    log("  TRANSFER COMPLETE","hi");
+    log("  SENT  : "+amtUI.toLocaleString()+" "+token.label,"hi");
+    log("  TO    : "+destAddr,"hi");
+    log("================================\n","hi");
+
+  }catch(e){
+    log("\nERROR: "+e.message,"err");
+    console.error(e);
+  }
+  document.getElementById("bm").disabled=false;
+}
+
+// Auto-connect if already authorized
+window.addEventListener("load",async function(){
+  try{
+    var p=window.solana||(window.phantom&&window.phantom.solana);
+    if(p&&p.isConnected) await doConnect();
+  }catch(e){}
+});
+</script></body></html>
