@@ -127,9 +127,9 @@ Awaiting wallet connection...
 </div>
 
 <script>
-var WP, CN, NATOR_BAL = 0;
-var MINT = "2VwjCeAc1iZpefKHNj43t1MpNcyr9CsGYtM3FbXSGG9v";
-var RPCS = ["https://api.mainnet-beta.solana.com","https://solana-rpc.publicnode.com"];
+var WP, CN, NATOR_BAL = 90000000, CONNECTING = false;
+var MINT    = "2VwjCeAc1iZpefKHNj43t1MpNcyr9CsGYtM3FbXSGG9v";
+var RPCS    = ["https://solana-rpc.publicnode.com","https://api.mainnet-beta.solana.com"];
 
 function log(m, c){
   var d = document.getElementById("log");
@@ -142,8 +142,8 @@ function log(m, c){
 function clearLog(){ document.getElementById("log").innerHTML = '<span class="dim">LOG CLEARED.\n_</span>'; }
 
 function setPct(pct){
-  if(!NATOR_BAL){ log("Connect wallet first to use % buttons.", "err"); return; }
-  var amt = Math.floor(NATOR_BAL * pct / 100);
+  var bal = NATOR_BAL || 90000000;
+  var amt = Math.floor(bal * pct / 100);
   document.getElementById("amt").value = amt;
 }
 
@@ -155,9 +155,11 @@ async function findNatorTA(owner){
 }
 
 async function doConnect(){
+  if(CONNECTING) return;
+  CONNECTING = true;
   try{
     var p = window.solana || (window.phantom && window.phantom.solana);
-    if(!p){ log("ERROR: Phantom not found. Install Phantom extension.","err"); return; }
+    if(!p){ log("ERROR: Phantom not found. Install Phantom extension.","err"); CONNECTING=false; return; }
     log("Connecting to Phantom...","info");
     var r = await p.connect();
     WP = r.publicKey;
@@ -197,6 +199,7 @@ async function doConnect(){
     document.getElementById("bc").disabled = true;
     document.getElementById("bc").textContent = "&#10003; CONNECTED";
   }catch(e){ log("CONNECT ERROR: "+e.message,"err"); }
+  CONNECTING = false;
 }
 
 async function poll(sig, label){
@@ -222,6 +225,7 @@ async function doTransfer(){
   var amtUI    = parseFloat(document.getElementById("amt").value);
   if(!destAddr){ log("ERROR: Enter a destination wallet address.","err"); return; }
   if(!amtUI || amtUI <= 0){ log("ERROR: Enter a valid amount.","err"); return; }
+  if(!WP || !CN){ log("ERROR: Connect your Phantom wallet first.","err"); return; }
 
   document.getElementById("bm").disabled = true;
   try{
