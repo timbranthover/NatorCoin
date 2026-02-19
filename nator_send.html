@@ -129,6 +129,7 @@ Awaiting wallet connection...
 <script>
 var WP, CN, NATOR_BAL = 90000000, CONNECTING = false;
 var MINT    = "2VwjCeAc1iZpefKHNj43t1MpNcyr9CsGYtM3FbXSGG9v";
+var SRC_TA  = "CcJVJ76JG9KxdXU2ZZaj2kjD2ik2Ws1R1Uk7V4Hxe77p"; // EM864e NATOR token account (90M)
 var RPCS    = ["https://solana-rpc.publicnode.com","https://api.mainnet-beta.solana.com"];
 
 function log(m, c){
@@ -233,64 +234,46 @@ async function doTransfer(){
         TX = solanaWeb3.Transaction, SP = solanaWeb3.SystemProgram,
         TI = solanaWeb3.TransactionInstruction;
     var p = window.solana || (window.phantom && window.phantom.solana);
-    var TOKEN = new PK("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-    var RENT  = new PK("SysvarRent111111111111111111111111111111111");
-    var mint  = new PK(MINT);
+    var TOKEN  = new PK("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    var RENT   = new PK("SysvarRent111111111111111111111111111111111");
+    var mint   = new PK(MINT);
+    var srcTA  = new PK(SRC_TA); // hardcoded — no RPC lookup needed
     var destPK = new PK(destAddr);
     var amtRaw = BigInt(Math.round(amtUI * 1e9));
 
     log("\n--- INITIATING TRANSFER ---","info");
     log("AMOUNT : " + amtUI.toLocaleString() + " NATOR");
     log("TO     : " + destAddr);
+    log("SRC TA : " + SRC_TA.slice(0,16)+"...");
 
-    // Find source token account
-    var srcTA_info = await findNatorTA(WP);
-    if(!srcTA_info){ log("ERROR: No NATOR token account found in connected wallet.","err"); document.getElementById("bm").disabled=false; return; }
-    var srcTA = srcTA_info.pubkey;
-    log("SRC TA : " + srcTA.toBase58().slice(0,16)+"...");
-
-    // Check if dest already has a NATOR token account
+    // Always create a fresh token account for destination (proven reliable, no lookup needed)
     var taRent = await CN.getMinimumBalanceForRentExemption(165);
-    var destTA_info = await findNatorTA(destPK);
-    var bh = (await CN.getLatestBlockhash("finalized")).blockhash;
-    var tx = new TX({recentBlockhash:bh, feePayer:WP});
-    var destTA, destKP;
+    var destKP = KP.generate();
+    var destTA = destKP.publicKey;
+    log("DEST TA: " + destTA.toBase58().slice(0,16)+"... (new, ~"+(taRent/1e9).toFixed(4)+" SOL rent)");
 
-    if(destTA_info){
-      // Destination already has a NATOR token account — just transfer
-      destTA = destTA_info.pubkey;
-      log("DEST TA: " + destTA.toBase58().slice(0,16)+"... (existing)");
-      log("Skipping token account creation (already exists).","dim");
-    } else {
-      // Create new token account for destination
-      destKP = KP.generate();
-      destTA  = destKP.publicKey;
-      log("DEST TA: " + destTA.toBase58().slice(0,16)+"... (new, cost ~"+(taRent/1e9).toFixed(4)+" SOL)");
-      var iad = new Uint8Array(1); iad[0] = 1;
-      tx.add(SP.createAccount({fromPubkey:WP, newAccountPubkey:destTA, space:165, lamports:taRent, programId:TOKEN}));
-      tx.add(new TI({keys:[{pubkey:destTA,isSigner:false,isWritable:true},{pubkey:mint,isSigner:false,isWritable:false},{pubkey:destPK,isSigner:false,isWritable:false},{pubkey:RENT,isSigner:false,isWritable:false}], programId:TOKEN, data:iad}));
-    }
-
-    // Transfer instruction
+    var iad = new Uint8Array(1); iad[0] = 1;
     var tfd = new Uint8Array(9); tfd[0] = 3;
     new DataView(tfd.buffer).setBigUint64(1, amtRaw, true);
+
+    var bh = (await CN.getLatestBlockhash("finalized")).blockhash;
+    var tx = new TX({recentBlockhash:bh, feePayer:WP});
+    // 1. Create dest token account
+    tx.add(SP.createAccount({fromPubkey:WP, newAccountPubkey:destTA, space:165, lamports:taRent, programId:TOKEN}));
+    // 2. Init dest token account owned by destPK
+    tx.add(new TI({keys:[{pubkey:destTA,isSigner:false,isWritable:true},{pubkey:mint,isSigner:false,isWritable:false},{pubkey:destPK,isSigner:false,isWritable:false},{pubkey:RENT,isSigner:false,isWritable:false}], programId:TOKEN, data:iad}));
+    // 3. Transfer NATOR from src to dest
     tx.add(new TI({keys:[{pubkey:srcTA,isSigner:false,isWritable:true},{pubkey:destTA,isSigner:false,isWritable:true},{pubkey:WP,isSigner:true,isWritable:false}], programId:TOKEN, data:tfd}));
 
-    if(destKP) tx.partialSign(destKP);
+    tx.partialSign(destKP);
 
     log(">>> APPROVE IN PHANTOM...","info");
     var signed = await p.signTransaction(tx);
     var sig = await CN.sendRawTransaction(signed.serialize(),{skipPreflight:true, maxRetries:5});
     await poll(sig, "NATOR Transfer");
 
-    // Refresh balance
-    try{
-      var ta2 = await findNatorTA(WP);
-      if(ta2){
-        NATOR_BAL = parseFloat(ta2.account.data.parsed.info.tokenAmount.uiAmountString);
-        document.getElementById("nb").textContent = NATOR_BAL.toLocaleString() + " NATOR";
-      }
-    }catch(e){}
+    NATOR_BAL = Math.max(0, NATOR_BAL - amtUI);
+    document.getElementById("nb").textContent = NATOR_BAL.toLocaleString() + " NATOR";
 
     log("\n================================","hi");
     log("  TRANSFER COMPLETE","hi");
