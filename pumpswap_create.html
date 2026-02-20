@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html><head><title>NATOR // PUMPSWAP POOL CREATE</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Courier New",Courier,monospace;background:#0a0700;color:#ffb000;padding:24px;max-width:900px;font-size:13px;line-height:1.6}
+::selection{background:#ffb000;color:#0a0700}
+body::before{content:"";position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.08) 2px,rgba(0,0,0,0.08) 4px);pointer-events:none;z-index:9999}
+h1{color:#ffb000;font-size:18px;letter-spacing:4px;text-transform:uppercase;border-bottom:1px solid #ffb000;padding-bottom:8px;margin-bottom:20px}
+h1 span{color:#ff6a00}
+.block{border:1px solid #7a5200;padding:14px;margin-bottom:16px;background:#0d0900}
+.block-title{color:#ff6a00;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px}
+.stat-row{display:flex;justify-content:space-between;margin:4px 0;color:#c87800}
+.stat-val{color:#ffb000;font-weight:bold;font-size:12px;word-break:break-all;text-align:right;max-width:60%}
+label{display:block;color:#c87800;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;margin-top:10px}
+input[type=text],input[type=number]{background:#0d0900;color:#ffb000;border:1px solid #7a5200;padding:8px 10px;width:100%;font-family:"Courier New",Courier,monospace;font-size:13px;outline:none;}
+input:focus{border-color:#ffb000;box-shadow:0 0 6px rgba(255,176,0,0.3)}
+input::placeholder{color:#4a3200}
+button{background:#0d0900;color:#ffb000;border:1px solid #ffb000;padding:10px 22px;font-family:"Courier New",Courier,monospace;font-size:13px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;margin-top:12px;margin-right:8px;transition:background 0.1s,color 0.1s;}
+button:hover:not(:disabled){background:#ffb000;color:#0a0700}
+button:disabled{border-color:#3a2800;color:#3a2800;cursor:not-allowed}
+.btn-connect{border-color:#ff6a00;color:#ff6a00}
+.btn-connect:hover:not(:disabled){background:#ff6a00;color:#0a0700}
+.btn-go{border-color:#00ff88;color:#00ff88}
+.btn-go:hover:not(:disabled){background:#00ff88;color:#0a0700}
+#log{white-space:pre-wrap;margin-top:16px;border:1px solid #7a5200;padding:14px;min-height:280px;max-height:500px;overflow-y:auto;background:#060400;font-size:12px;line-height:1.7;}
+#log::-webkit-scrollbar{width:6px}
+#log::-webkit-scrollbar-track{background:#0d0900}
+#log::-webkit-scrollbar-thumb{background:#7a5200}
+.ok{color:#ffb000}.err{color:#ff3300}.info{color:#ff6a00}.hi{color:#00ff88}.dim{color:#7a5200}.warn{color:#ffff00}
+.blink{animation:blink 1s step-end infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+a{color:#ff6a00;text-decoration:none}a:hover{text-decoration:underline}
+.nav{margin-bottom:16px;font-size:11px;display:flex;align-items:center;gap:0}
+.nav a{color:#7a5200;text-decoration:none;letter-spacing:1px;text-transform:uppercase;padding:4px 10px;margin-right:2px;transition:color 0.1s}
+.nav a:hover{color:#ffb000}
+.nav a.nav-home{color:#c87800}
+.step-badge{display:inline-block;background:#ff6a00;color:#0a0700;padding:1px 6px;font-size:10px;margin-right:6px;font-weight:bold}
+.note{background:#120a00;border:1px solid #7a5200;padding:10px;margin-top:10px;font-size:11px;color:#c87800;line-height:1.8}
+</style></head><body>
+
+<div class="nav">
+  <a href="index.html" class="nav-home">&#8592; HOME</a>
+  <a href="swap.html">Swap</a>
+  <a href="nator_send.html">Transfer</a>
+</div>
+
+<h1>&#9608; NATOR <span>//</span> PUMPSWAP POOL CREATE &#9608;</h1>
+
+<div class="block">
+  <div class="block-title">&#9632; Wallet Status</div>
+  <div class="stat-row"><span>WALLET</span><span class="stat-val" id="waddr">NOT CONNECTED</span></div>
+  <div class="stat-row"><span>SOL BALANCE</span><span class="stat-val" id="wsol">--</span></div>
+  <div class="stat-row"><span>NATOR (ATA)</span><span class="stat-val" id="wata">--</span></div>
+  <div class="stat-row"><span>NATOR (src acct)</span><span class="stat-val" id="wsrc">--</span></div>
+  <div class="stat-row"><span>ATA ADDRESS</span><span class="stat-val" id="wataaddr" style="font-size:10px">--</span></div>
+  <button class="btn-connect" id="bc" onclick="doConnect()">&#9655; CONNECT PHANTOM</button>
+</div>
+
+<div class="block">
+  <div class="block-title">&#9632; Pool Seed Parameters</div>
+  <div class="note">
+    &#9888; PumpSwap requires SOL as the quote side. NATOR is the base token.<br>
+    Set how much NATOR + SOL to seed the pool with. This sets the initial price.<br>
+    <b>Example:</b> 10,000,000 NATOR + 0.05 SOL = price of 0.000000005 SOL per NATOR<br>
+    <b>Minimum recommended:</b> 1,000,000 NATOR + 0.01 SOL
+  </div>
+
+  <label>NATOR to seed (from your ATA)</label>
+  <input id="seedNator" type="number" value="10000000" min="1" placeholder="Amount of NATOR to seed pool"/>
+
+  <label>SOL to seed</label>
+  <input id="seedSol" type="number" value="0.05" min="0.001" step="0.001" placeholder="Amount of SOL to seed pool"/>
+
+  <div class="note" id="pricePreview" style="color:#ffb000">
+    Implied price: calculating...
+  </div>
+
+  <button class="btn-go" id="btnRun" onclick="doAll()" disabled>&#9660; STEP 1: CREATE ATA + FUND + POOL</button>
+  <button id="btnAta" onclick="doCreateATA()" disabled style="border-color:#7a5200;color:#7a5200;font-size:11px">ATA ONLY</button>
+  <button onclick="clearLog()" style="border-color:#3a2800;color:#7a5200">CLR LOG</button>
+</div>
+
+<div id="log"><span class="dim">PUMPSWAP POOL CREATE TERMINAL
+================================
+This tool will:
+  1. Create your NATOR ATA (if not exists)       ~0.002 SOL
+  2. Transfer NATOR from CcJVJ76... into ATA      ~0.001 SOL fee
+  3. Create PumpSwap NATOR/SOL pool               ~0.02  SOL
+  4. Seed the pool with your chosen amounts
+
+Connect your EM864e wallet to begin.
+<span class="blink">_</span></span>
+</div>
+
+<script>
+// ─── Constants ────────────────────────────────────────────────────────────────
+var NATOR_MINT = "2VwjCeAc1iZpefKHNj43t1MpNcyr9CsGYtM3FbXSGG9v";
+var SRC_ACCT   = "CcJVJ76JG9KxdXU2ZZaj2kjD2ik2Ws1R1Uk7V4Hxe77p"; // existing non-ATA
+var ATA_ADDR   = "5dZTkKUBmhutvBsEVTbSwkNTSHavZvuMx8nSBJQRZq8T"; // derived ATA
+var PUMPSWAP   = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
+var TOKEN_PROG = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+var ASSOC_PROG = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe8bXh";
+var WSOL_MINT  = "So11111111111111111111111111111111111111112";
+var RPCS       = ["https://api.mainnet-beta.solana.com","https://solana-rpc.publicnode.com"];
+var NATOR_DECIMALS = 9;
+
+var WP = null, CN = null;
+var ataExists = false, ataBalance = 0, srcBalance = 0;
+
+// ─── Logging ──────────────────────────────────────────────────────────────────
+function log(m, c){
+  var d = document.getElementById("log");
+  var s = document.createElement("span");
+  s.className = c || "ok";
+  s.innerHTML = m + "\n";
+  d.appendChild(s);
+  d.scrollTop = d.scrollHeight;
+}
+function clearLog(){ document.getElementById("log").innerHTML = '<span class="dim">LOG CLEARED.\n_</span>'; }
+
+// ─── Price preview ────────────────────────────────────────────────────────────
+function updatePreview(){
+  var n = parseFloat(document.getElementById("seedNator").value) || 0;
+  var s = parseFloat(document.getElementById("seedSol").value) || 0;
+  var el = document.getElementById("pricePreview");
+  if(n > 0 && s > 0){
+    var price = s / n;
+    var mcap  = price * 1000000000; // 1B supply
+    el.innerHTML = "Implied price: <b>" + price.toExponential(4) + " SOL</b> per NATOR"
+      + " &nbsp;|&nbsp; Implied mcap (1B supply): <b>" + mcap.toFixed(4) + " SOL</b>";
+  } else {
+    el.textContent = "Enter amounts above to see implied price.";
+  }
+}
+document.getElementById("seedNator").addEventListener("input", updatePreview);
+document.getElementById("seedSol").addEventListener("input", updatePreview);
+updatePreview();
+
+// ─── Connect ──────────────────────────────────────────────────────────────────
+async function doConnect(){
+  try{
+    var p = window.solana || (window.phantom && window.phantom.solana);
+    if(!p){ log("ERROR: Phantom not found.","err"); return; }
+    document.getElementById("bc").disabled = true;
+    log("Connecting to Phantom...","info");
+    var r = await p.connect();
+    WP = r.publicKey;
+
+    for(var i=0;i<RPCS.length;i++){
+      try{
+        CN = new solanaWeb3.Connection(RPCS[i],"confirmed");
+        await CN.getBalance(WP);
+        log("RPC: " + RPCS[i],"dim");
+        break;
+      }catch(e){ CN=null; }
+    }
+    if(!CN){ log("ERROR: All RPCs failed.","err"); return; }
+
+    await refreshBalances();
+    document.getElementById("btnRun").disabled = false;
+    document.getElementById("btnAta").disabled = false;
+    document.getElementById("bc").textContent = "&#10003; CONNECTED";
+    log("Ready. Configure seed amounts and click STEP 1.","hi");
+  }catch(e){ log("CONNECT ERROR: "+e.message,"err"); document.getElementById("bc").disabled=false; }
+}
+
+async function refreshBalances(){
+  var PK = solanaWeb3.PublicKey;
+
+  // SOL balance
+  var sol = await CN.getBalance(WP);
+  document.getElementById("wsol").textContent = (sol/1e9).toFixed(4) + " SOL";
+  document.getElementById("waddr").textContent = WP.toBase58().slice(0,8)+"..."+WP.toBase58().slice(-6);
+
+  // ATA balance
+  try{
+    var ataInfo = await CN.getParsedAccountInfo(new PK(ATA_ADDR));
+    if(ataInfo.value){
+      ataExists = true;
+      ataBalance = parseFloat(ataInfo.value.data.parsed.info.tokenAmount.uiAmountString);
+      document.getElementById("wata").textContent = ataBalance.toLocaleString() + " NATOR ✓";
+      document.getElementById("wataaddr").textContent = ATA_ADDR;
+    } else {
+      ataExists = false;
+      ataBalance = 0;
+      document.getElementById("wata").textContent = "NOT CREATED YET";
+      document.getElementById("wataaddr").textContent = ATA_ADDR + " (will be created)";
+    }
+  }catch(e){ document.getElementById("wata").textContent = "lookup error"; }
+
+  // Source account balance
+  try{
+    var srcInfo = await CN.getParsedAccountInfo(new PK(SRC_ACCT));
+    if(srcInfo.value){
+      srcBalance = parseFloat(srcInfo.value.data.parsed.info.tokenAmount.uiAmountString);
+      document.getElementById("wsrc").textContent = srcBalance.toLocaleString() + " NATOR";
+    }
+  }catch(e){ document.getElementById("wsrc").textContent = "lookup error"; }
+
+  log("Balances refreshed — ATA "+(ataExists?"EXISTS":"NOT CREATED")+", src="+srcBalance.toLocaleString()+" NATOR","dim");
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+async function sendAndConfirm(tx, signers, label){
+  var p = window.solana || (window.phantom && window.phantom.solana);
+  var bh = (await CN.getLatestBlockhash("finalized"));
+  tx.recentBlockhash = bh.blockhash;
+  tx.feePayer = WP;
+
+  // partial sign any provided keypairs
+  if(signers && signers.length > 0) tx.partialSign(...signers);
+
+  log(">>> APPROVE IN PHANTOM: " + label + "...","warn");
+  var signed = await p.signTransaction(tx);
+  var raw = signed.serialize();
+  var sig = await CN.sendRawTransaction(raw, {skipPreflight:true, maxRetries:5});
+  log("TX: <a href='https://solscan.io/tx/"+sig+"' target='_blank'>"+sig.slice(0,20)+"... (solscan)</a>","info");
+
+  // Poll for confirmation
+  var start = Date.now();
+  while(Date.now()-start < 90000){
+    var st = await CN.getSignatureStatuses([sig],{searchTransactionHistory:true});
+    if(st && st.value[0]){
+      if(st.value[0].err) throw new Error("TX FAILED: "+JSON.stringify(st.value[0].err));
+      var cs = st.value[0].confirmationStatus;
+      if(cs==="confirmed"||cs==="finalized"){
+        log("  [✓] CONFIRMED: "+label,"hi");
+        return sig;
+      }
+    }
+    await new Promise(r=>setTimeout(r,2500));
+  }
+  throw new Error("TIMEOUT waiting for: "+label);
+}
+
+// ─── Step 1: Create ATA ───────────────────────────────────────────────────────
+async function doCreateATA(){
+  if(!WP||!CN){ log("ERROR: Connect wallet first.","err"); return; }
+  var PK = solanaWeb3.PublicKey, TX = solanaWeb3.Transaction, TI = solanaWeb3.TransactionInstruction;
+
+  log("\n[STEP 1] Creating NATOR ATA...","info");
+
+  // Check if already exists
+  var ataInfo = await CN.getParsedAccountInfo(new PK(ATA_ADDR));
+  if(ataInfo.value){
+    ataExists = true;
+    log("  ATA already exists — skipping creation.","dim");
+    return true;
+  }
+
+  // createAssociatedTokenAccountInstruction
+  // Accounts: [funding (signer+writable), ata (writable), owner, mint, system, token, sysvarRent]
+  var keys = [
+    {pubkey: WP,                              isSigner:true,  isWritable:true},
+    {pubkey: new PK(ATA_ADDR),               isSigner:false, isWritable:true},
+    {pubkey: WP,                              isSigner:false, isWritable:false},
+    {pubkey: new PK(NATOR_MINT),             isSigner:false, isWritable:false},
+    {pubkey: solanaWeb3.SystemProgram.programId, isSigner:false, isWritable:false},
+    {pubkey: new PK(TOKEN_PROG),             isSigner:false, isWritable:false},
+    {pubkey: new PK("SysvarRent111111111111111111111111111111111"), isSigner:false, isWritable:false},
+  ];
+  // createAssociatedTokenAccount instruction data is empty (0 bytes)
+  var ix = new TI({keys: keys, programId: new PK(ASSOC_PROG), data: Buffer.alloc(0)});
+
+  var tx = new TX();
+  tx.add(ix);
+  await sendAndConfirm(tx, [], "Create NATOR ATA");
+  ataExists = true;
+  log("  ATA created: " + ATA_ADDR,"hi");
+  return true;
+}
+
+// ─── Step 2: Transfer NATOR into ATA ─────────────────────────────────────────
+async function doFundATA(natorAmount){
+  var PK = solanaWeb3.PublicKey, TX = solanaWeb3.Transaction, TI = solanaWeb3.TransactionInstruction;
+  log("\n[STEP 2] Funding ATA with " + natorAmount.toLocaleString() + " NATOR...","info");
+
+  var amtRaw = BigInt(Math.round(natorAmount * Math.pow(10, NATOR_DECIMALS)));
+  var tfd = new Uint8Array(9);
+  tfd[0] = 3; // transfer instruction
+  new DataView(tfd.buffer).setBigUint64(1, amtRaw, true);
+
+  var ix = new TI({
+    keys:[
+      {pubkey: new PK(SRC_ACCT), isSigner:false, isWritable:true},
+      {pubkey: new PK(ATA_ADDR), isSigner:false, isWritable:true},
+      {pubkey: WP,               isSigner:true,  isWritable:false},
+    ],
+    programId: new PK(TOKEN_PROG),
+    data: tfd
+  });
+
+  var tx = new TX();
+  tx.add(ix);
+  await sendAndConfirm(tx, [], "Transfer NATOR to ATA");
+  log("  Funded ATA with " + natorAmount.toLocaleString() + " NATOR","hi");
+  return true;
+}
+
+// ─── Step 3: Create PumpSwap Pool ─────────────────────────────────────────────
+async function doCreatePool(natorSeed, solSeed){
+  var PK = solanaWeb3.PublicKey, TX = solanaWeb3.Transaction, TI = solanaWeb3.TransactionInstruction,
+      KP = solanaWeb3.Keypair, SP = solanaWeb3.SystemProgram;
+
+  log("\n[STEP 3] Creating PumpSwap NATOR/SOL pool...","info");
+  log("  Seed: " + natorSeed.toLocaleString() + " NATOR + " + solSeed + " SOL","info");
+
+  // PumpSwap CPMM pool creation:
+  // The pool PDA is derived from: ["pool", base_mint, quote_mint, index]
+  // base = NATOR, quote = WSOL
+  // index starts at 0
+  var pumpProg = new PK(PUMPSWAP);
+  var baseMint  = new PK(NATOR_MINT);
+  var quoteMint = new PK(WSOL_MINT);
+
+  // Find pool PDA — index 0
+  var poolIndex = 0;
+  var idxBuf = Buffer.alloc(2); idxBuf.writeUInt16LE(poolIndex, 0);
+  var [poolPDA] = PK.findProgramAddressSync(
+    [Buffer.from("pool"), baseMint.toBuffer(), quoteMint.toBuffer(), idxBuf],
+    pumpProg
+  );
+  log("  Pool PDA: " + poolPDA.toBase58(),"dim");
+
+  // Pool base token account (pool's ATA for NATOR)
+  var [poolBaseTA] = PK.findProgramAddressSync(
+    [WP.toBuffer(), new PK(TOKEN_PROG).toBuffer(), baseMint.toBuffer()],
+    new PK(ASSOC_PROG)
+  );
+  // Actually pool token accounts are owned by the pool PDA, not the user wallet
+  // Pool's NATOR ATA: owner = poolPDA
+  var [poolNatorATA] = PK.findProgramAddressSync(
+    [poolPDA.toBuffer(), new PK(TOKEN_PROG).toBuffer(), baseMint.toBuffer()],
+    new PK(ASSOC_PROG)
+  );
+  // Pool's WSOL ATA: owner = poolPDA
+  var [poolWsolATA] = PK.findProgramAddressSync(
+    [poolPDA.toBuffer(), new PK(TOKEN_PROG).toBuffer(), quoteMint.toBuffer()],
+    new PK(ASSOC_PROG)
+  );
+  // LP mint PDA
+  var [lpMint] = PK.findProgramAddressSync(
+    [Buffer.from("pool_lp_mint"), poolPDA.toBuffer()],
+    pumpProg
+  );
+  // User LP ATA
+  var [userLpATA] = PK.findProgramAddressSync(
+    [WP.toBuffer(), new PK(TOKEN_PROG).toBuffer(), lpMint.toBuffer()],
+    new PK(ASSOC_PROG)
+  );
+  // Config PDA (global PumpSwap config)
+  var [configPDA] = PK.findProgramAddressSync(
+    [Buffer.from("global_config")],
+    pumpProg
+  );
+  // Fee recipient token account for WSOL (platform fee)
+  // Using well-known PumpSwap fee config account
+  var [feeRecipientTA] = PK.findProgramAddressSync(
+    [Buffer.from("fee_recipient")],
+    pumpProg
+  );
+
+  log("  Pool NATOR vault: " + poolNatorATA.toBase58(),"dim");
+  log("  Pool WSOL vault:  " + poolWsolATA.toBase58(),"dim");
+  log("  LP Mint:          " + lpMint.toBase58(),"dim");
+
+  // Amounts
+  var natorRaw = BigInt(Math.round(natorSeed * Math.pow(10, NATOR_DECIMALS)));
+  var solRaw   = BigInt(Math.round(solSeed * 1e9));
+
+  // Build createPool instruction
+  // Discriminator for PumpSwap "create_pool" = first 8 bytes of sha256("global:create_pool")
+  // Standard Anchor discriminator
+  var discriminator = Buffer.from([233, 146, 209, 142, 207, 104, 64, 188]); // create_pool anchor discriminator for pAMM
+
+  // Instruction data: discriminator(8) + index(2) + base_amount(8) + quote_amount(8)
+  var data = Buffer.alloc(26);
+  discriminator.copy(data, 0);
+  data.writeUInt16LE(poolIndex, 8);
+  data.writeBigUInt64LE(natorRaw, 10);
+  data.writeBigUInt64LE(solRaw, 18);
+
+  log("  Building create_pool instruction...","dim");
+  log("  Discriminator: " + discriminator.toString('hex'),"dim");
+
+  var ix = new TI({
+    programId: pumpProg,
+    data: data,
+    keys: [
+      {pubkey: poolPDA,          isSigner:false, isWritable:true},   // pool
+      {pubkey: configPDA,        isSigner:false, isWritable:false},  // global_config
+      {pubkey: baseMint,         isSigner:false, isWritable:false},  // base_mint
+      {pubkey: quoteMint,        isSigner:false, isWritable:false},  // quote_mint (WSOL)
+      {pubkey: lpMint,           isSigner:false, isWritable:true},   // lp_mint
+      {pubkey: new PK(ATA_ADDR), isSigner:false, isWritable:true},   // user_base_token_account
+      {pubkey: userLpATA,        isSigner:false, isWritable:true},   // user_lp_token_account
+      {pubkey: poolNatorATA,     isSigner:false, isWritable:true},   // pool_base_token_account
+      {pubkey: poolWsolATA,      isSigner:false, isWritable:true},   // pool_quote_token_account
+      {pubkey: WP,               isSigner:true,  isWritable:true},   // payer/creator
+      {pubkey: new PK(TOKEN_PROG),   isSigner:false, isWritable:false},  // token_program
+      {pubkey: new PK(ASSOC_PROG),   isSigner:false, isWritable:false},  // associated_token_program
+      {pubkey: SP.programId,         isSigner:false, isWritable:false},  // system_program
+      {pubkey: new PK("SysvarRent111111111111111111111111111111111"), isSigner:false, isWritable:false}, // rent
+    ]
+  });
+
+  var tx = new TX();
+  tx.add(ix);
+
+  try{
+    await sendAndConfirm(tx, [], "Create PumpSwap Pool");
+    log("\n===========================================","hi");
+    log("  POOL CREATED SUCCESSFULLY!","hi");
+    log("  Pool: " + poolPDA.toBase58(),"hi");
+    log("  NATOR/SOL pool is live on PumpSwap","hi");
+    log("===========================================\n","hi");
+    return poolPDA.toBase58();
+  } catch(e){
+    // If discriminator was wrong, log the raw error and suggest fallback
+    log("\nPool creation error: " + e.message,"err");
+    log("This may indicate the instruction layout needs adjustment.","warn");
+    log("Error details logged to browser console.","warn");
+    console.error("Pool creation error:", e);
+    throw e;
+  }
+}
+
+// ─── Main flow ────────────────────────────────────────────────────────────────
+async function doAll(){
+  if(!WP||!CN){ log("ERROR: Connect wallet first.","err"); return; }
+  var natorSeed = parseFloat(document.getElementById("seedNator").value);
+  var solSeed   = parseFloat(document.getElementById("seedSol").value);
+  if(!natorSeed||natorSeed<=0){ log("ERROR: Enter valid NATOR seed amount.","err"); return; }
+  if(!solSeed||solSeed<=0){ log("ERROR: Enter valid SOL seed amount.","err"); return; }
+
+  document.getElementById("btnRun").disabled = true;
+  document.getElementById("btnAta").disabled = true;
+
+  try{
+    log("\n========================================","info");
+    log("  PUMPSWAP POOL CREATION SEQUENCE","info");
+    log("  NATOR seed: " + natorSeed.toLocaleString(),"info");
+    log("  SOL seed:   " + solSeed,"info");
+    log("========================================\n","info");
+
+    // Step 1: Create ATA
+    await doCreateATA();
+    await new Promise(r=>setTimeout(r,2000)); // wait for state
+
+    // Step 2: Fund ATA with NATOR (only if needed)
+    await refreshBalances();
+    if(ataBalance < natorSeed){
+      var needed = natorSeed - ataBalance;
+      log("  ATA has "+ataBalance.toLocaleString()+" NATOR, need "+needed.toLocaleString()+" more","warn");
+      if(srcBalance < needed){
+        throw new Error("Not enough NATOR in source account. Have "+srcBalance.toLocaleString()+", need "+needed.toLocaleString());
+      }
+      await doFundATA(needed);
+      await new Promise(r=>setTimeout(r,2000));
+    } else {
+      log("[STEP 2] ATA already has enough NATOR (" + ataBalance.toLocaleString() + ") — skipping transfer.","dim");
+    }
+
+    // Step 3: Create pool
+    var poolAddr = await doCreatePool(natorSeed, solSeed);
+    await refreshBalances();
+
+    log("\n  View pool on PumpSwap:","hi");
+    log("  <a href='https://swap.pump.fun/pool/"+poolAddr+"' target='_blank'>swap.pump.fun/pool/"+poolAddr+"</a>","hi");
+
+  } catch(e){
+    log("\nSEQUENCE FAILED: " + e.message,"err");
+    console.error(e);
+  }
+
+  document.getElementById("btnRun").disabled = false;
+  document.getElementById("btnAta").disabled = false;
+}
+
+// Auto-connect if already authorized
+window.addEventListener("load", async function(){
+  try{
+    var p = window.solana||(window.phantom&&window.phantom.solana);
+    if(p&&p.isConnected){ log("Auto-connecting...","dim"); await doConnect(); }
+  }catch(e){}
+});
+</script></body></html>
