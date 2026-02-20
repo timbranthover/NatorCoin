@@ -38,7 +38,7 @@ button:disabled{border-color:#3a2800;color:#3a2800;cursor:not-allowed}
 .pct-btns button:hover{background:#7a5200;color:#ffb000}
 .swap-arrow{text-align:center;font-size:18px;color:#ff6a00;margin:10px 0;letter-spacing:6px}
 
-/* ── Custom dropdown — fully amber, zero OS hover ──────────── */
+/* ── Custom dropdown ─────────────────────────────────────────────── */
 .dd-wrap{position:relative;width:100%;margin-top:0}
 .dd-selected{
   background:#0d0900;color:#ffb000;border:1px solid #7a5200;
@@ -80,7 +80,7 @@ button:disabled{border-color:#3a2800;color:#3a2800;cursor:not-allowed}
 .qval.warn{color:#ff6a00}
 .qval.bad{color:#ff3300}
 
-/* Slippage select — keep as native, style it dark */
+/* Slippage select */
 select.slip-sel{
   background:#0d0900;color:#ffb000;border:1px solid #7a5200;
   padding:8px 10px;width:100%;font-family:"Courier New",Courier,monospace;
@@ -101,6 +101,7 @@ select.slip-sel option{background:#0d0900;color:#ffb000}
 .mint-status{font-size:11px;margin-top:4px;letter-spacing:1px;min-height:16px}
 .mint-status.err{color:#ff3300}
 .mint-status.loading{color:#ff6a00}
+
 /* Token confirm card */
 .tok-card{display:none;margin-top:8px;border:1px solid #00ff88;background:#040300;padding:10px 12px}
 .tok-card.show{display:block}
@@ -108,6 +109,64 @@ select.slip-sel option{background:#0d0900;color:#ffb000}
 .tok-card-sym{color:#ffb000;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin-top:2px}
 .tok-card-addr{color:#7a5200;font-size:10px;letter-spacing:1px;margin-top:4px;word-break:break-all}
 .tok-card-note{color:#ff6a00;font-size:10px;letter-spacing:1px;margin-top:4px}
+
+/* ── FEATURE 1: Token Trust Dossier ─────────────────────────────── */
+.trust-dossier{
+  display:none;margin-top:12px;border:1px solid #3a2800;background:#080500;padding:10px 12px;
+}
+.trust-dossier.show{display:block}
+.trust-dossier-title{
+  color:#7a5200;font-size:10px;letter-spacing:3px;text-transform:uppercase;
+  margin-bottom:8px;border-bottom:1px solid #1a0e00;padding-bottom:5px;
+}
+.trust-row{
+  display:flex;justify-content:space-between;align-items:center;
+  margin:5px 0;font-size:11px;
+}
+.trust-key{color:#7a5200;letter-spacing:1px;min-width:90px}
+.trust-bar{
+  flex:1;margin:0 8px;height:5px;background:#1a0e00;position:relative;overflow:hidden;
+}
+.trust-bar-fill{height:100%;transition:width 0.4s ease}
+.trust-verdict{
+  font-size:10px;letter-spacing:1px;font-weight:bold;min-width:80px;text-align:right;
+}
+.trust-verdict.safe{color:#00ff88}
+.trust-verdict.warn{color:#ff6a00}
+.trust-verdict.bad{color:#ff3300}
+.trust-verdict.dim{color:#7a5200}
+.trust-loading{color:#7a5200;font-size:11px;letter-spacing:2px;animation:blink 1s step-end infinite}
+
+/* ── FEATURE 5: Liquidity Depth Signal ──────────────────────────── */
+.depth-row{display:flex;justify-content:space-between;align-items:center;margin:5px 0;font-size:12px;border-bottom:1px solid #1a1000;padding-bottom:4px}
+.depth-bar-wrap{display:flex;align-items:center;gap:6px;flex:1;margin-left:8px}
+.depth-bar-ascii{color:#ffb000;letter-spacing:1px;font-size:12px}
+.depth-verdict{font-size:10px;letter-spacing:1px;white-space:nowrap}
+.depth-verdict.liquid{color:#00ff88}
+.depth-verdict.mid{color:#ffb000}
+.depth-verdict.thin{color:#ff6a00}
+.depth-verdict.dry{color:#ff3300}
+
+/* ── FEATURE 7: Quote Expiry Indicator ──────────────────────────── */
+.quote-ttl{
+  display:none;margin-top:10px;padding:8px 12px;border:1px solid #3a2800;
+  background:#060400;font-size:11px;
+}
+.quote-ttl.show{display:flex;align-items:center;gap:10px}
+.ttl-label{color:#7a5200;letter-spacing:2px;white-space:nowrap}
+.ttl-bar{
+  flex:1;height:4px;background:#1a0e00;position:relative;overflow:hidden;
+}
+.ttl-bar-fill{
+  height:100%;background:#ffb000;transition:width 0.9s linear;
+}
+.ttl-bar-fill.urgent{background:#ff6a00}
+.ttl-bar-fill.critical{background:#ff3300}
+.ttl-seconds{color:#ffb000;min-width:40px;text-align:right;letter-spacing:1px}
+.ttl-seconds.urgent{color:#ff6a00}
+.ttl-seconds.critical{color:#ff3300;animation:blink 0.5s step-end infinite}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 
 /* Log */
 #log{white-space:pre-wrap;margin-top:16px;border:1px solid #7a5200;padding:14px;
@@ -147,6 +206,8 @@ a:hover{text-decoration:underline}
   .swap-arrow{font-size:22px;margin:14px 0}
   .dd-selected{font-size:14px;padding:10px 32px 10px 10px}
   .dd-opt{font-size:14px;padding:9px 10px}
+  .trust-row{flex-wrap:wrap;gap:2px}
+  .quote-ttl.show{flex-wrap:wrap}
 }
 </style></head><body>
 
@@ -206,6 +267,12 @@ a:hover{text-decoration:underline}
     <div class="tok-card-note" id="tokCardNote"></div>
   </div>
 
+  <!-- FEATURE 1: Trust Dossier -->
+  <div class="trust-dossier" id="trustDossier">
+    <div class="trust-dossier-title">&#9632; Token Trust Dossier</div>
+    <div id="trustContent"><span class="trust-loading">SCANNING...</span></div>
+  </div>
+
   <label>Slippage Tolerance</label>
   <select id="slip" class="slip-sel">
     <option value="50">0.5%</option>
@@ -224,9 +291,24 @@ a:hover{text-decoration:underline}
     <div class="qrow"><span class="qkey">RATE</span><span class="qval" id="qRate">--</span></div>
     <div class="qrow"><span class="qkey">PRICE IMPACT</span><span class="qval" id="qImpact">--</span></div>
     <div class="qrow"><span class="qkey">ROUTE</span><span class="qval" id="qRoute">--</span></div>
+    <!-- FEATURE 5: Depth row inside quote box -->
+    <div class="depth-row" id="depthRow" style="display:none">
+      <span class="qkey">DEPTH</span>
+      <div class="depth-bar-wrap">
+        <span class="depth-bar-ascii" id="depthBarAscii">░░░░░░░░░░</span>
+        <span class="depth-verdict" id="depthVerdict"></span>
+      </div>
+    </div>
     <div class="qrow"><span class="qkey">MIN RECEIVED</span><span class="qval" id="qMin">--</span></div>
     <div class="qrow"><span class="qkey">SLIPPAGE</span><span class="qval" id="qSlip">--</span></div>
     <div class="qrow"><span class="qkey">EST. FEE</span><span class="qval">~0.000005 SOL</span></div>
+  </div>
+
+  <!-- FEATURE 7: Quote TTL bar -->
+  <div class="quote-ttl" id="quoteTTL">
+    <span class="ttl-label">QUOTE VALID</span>
+    <div class="ttl-bar"><div class="ttl-bar-fill" id="ttlFill"></div></div>
+    <span class="ttl-seconds" id="ttlSeconds">30s</span>
   </div>
 
   <div>
@@ -236,7 +318,7 @@ a:hover{text-decoration:underline}
   </div>
 </div>
 
-<div id="log"><span class="dim">BRANTSWAP TERMINAL v3.0
+<div id="log"><span class="dim">BRANTSWAP TERMINAL v3.1
 ================================
 Powered by Jupiter aggregator
 Connect wallet → select tokens → GET QUOTE → EXECUTE SWAP
@@ -246,9 +328,6 @@ Connect wallet → select tokens → GET QUOTE → EXECUTE SWAP
 <script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
 <script>
 // ── Constants ─────────────────────────────────────────────────────
-// JUP_SWAP: set to your Cloudflare Worker URL once deployed.
-// Worker proxies POST to api.jup.ag/swap/v1/swap, injects API key, returns CORS headers.
-// Until Worker is live: quote works, swap will fail (CORS).
 var JUP_QUOTE    = "https://public.jupiterapi.com/quote";
 var JUP_SWAP     = "https://square-fog-2a16.timbranthover.workers.dev";
 var RPCS = ["https://solana-rpc.publicnode.com","https://api.mainnet-beta.solana.com"];
@@ -270,6 +349,10 @@ var WALLET_TOKENS=[], ALL_TOKENS=[];
 var SELL_MINT=SOL_MINT, BUY_MINT=USDC_MINT;
 var BH_CACHE={hash:null,ts:0};
 
+// ── FEATURE 7 state ────────────────────────────────────────────────
+var TTL_INTERVAL=null, TTL_SECONDS=30, TTL_TOTAL=30;
+var TTL_SELL_MINT=null, TTL_BUY_MINT=null, TTL_AMT=null, TTL_SLIP=null;
+
 // ── Logging ────────────────────────────────────────────────────────
 function log(m,c){
   var d=document.getElementById("log");
@@ -282,6 +365,9 @@ function clearQuote(){
   LAST_QUOTE=null;
   document.getElementById("quoteBox").classList.remove("show");
   document.getElementById("bs").disabled=true;
+  stopTTL();
+  document.getElementById("quoteTTL").classList.remove("show");
+  document.getElementById("depthRow").style.display="none";
 }
 
 // ── RPC ────────────────────────────────────────────────────────────
@@ -346,7 +432,6 @@ function renderDD(side){
     })(div,side);
     listEl.appendChild(div);
   }
-  // update selected label
   var cur=ALL_TOKENS.filter(function(t){return t.mint===curMint;})[0];
   if(cur){
     var balStr=cur.balance>0&&side==="sell"?" ("+cur.balance.toLocaleString()+")":"";
@@ -356,7 +441,10 @@ function renderDD(side){
 
 function selectDDOpt(side, div){
   if(side==="sell") SELL_MINT=div.dataset.mint;
-  else              BUY_MINT =div.dataset.mint;
+  else {
+    BUY_MINT=div.dataset.mint;
+    triggerTrustDossier(BUY_MINT);
+  }
   closeAllDD();
   renderDD(side);
   clearQuote();
@@ -388,6 +476,74 @@ function setPct(pct){
   document.getElementById("sellAmt").value=parseFloat((bal*pct/100).toFixed(t.dec));
 }
 
+// ── FEATURE 1: Token Trust Dossier ────────────────────────────────
+var TRUST_CACHE={};
+
+function triggerTrustDossier(mint){
+  var el=document.getElementById("trustDossier");
+  var content=document.getElementById("trustContent");
+  el.classList.add("show");
+  if(mint===SOL_MINT){
+    content.innerHTML=
+      renderTrustRow("MINT AUTH","NATIVE SOL","safe",100)+
+      renderTrustRow("FREEZE AUTH","N/A","safe",100)+
+      renderTrustRow("TOKEN TYPE","NATIVE ASSET","safe",100);
+    return;
+  }
+  if(TRUST_CACHE[mint]){content.innerHTML=TRUST_CACHE[mint];return;}
+  content.innerHTML='<span class="trust-loading">SCANNING CHAIN...</span>';
+  fetchTrustData(mint).then(function(html){
+    TRUST_CACHE[mint]=html;
+    if(BUY_MINT===mint) content.innerHTML=html;
+  }).catch(function(){
+    if(BUY_MINT===mint)
+      content.innerHTML='<span style="color:#7a5200;font-size:11px">SCAN UNAVAILABLE</span>';
+  });
+}
+
+async function fetchTrustData(mint){
+  var info=await rpcFetch("getAccountInfo",[mint,{encoding:"jsonParsed"}]);
+  if(!info||!info.value)
+    return '<span style="color:#ff3300;font-size:11px">&#9888; MINT NOT FOUND ON-CHAIN</span>';
+  var parsed=info.value.data&&info.value.data.parsed&&info.value.data.parsed.info;
+  if(!parsed)
+    return '<span style="color:#ff3300;font-size:11px">&#9888; UNABLE TO PARSE MINT DATA</span>';
+
+  var mintAuth=parsed.mintAuthority;
+  var freezeAuth=parsed.freezeAuthority;
+  var supply=parseInt(parsed.supply||0);
+  var dec=parsed.decimals;
+  var supplyUI=(supply/Math.pow(10,dec)).toLocaleString(undefined,{maximumFractionDigits:0});
+
+  var mintVerdict,mintVClass,mintFill;
+  if(!mintAuth||mintAuth==="null"||mintAuth===null){
+    mintVerdict="REVOKED [SAFE]";mintVClass="safe";mintFill=100;
+  }else{
+    mintVerdict="LIVE [RISK]";mintVClass="bad";mintFill=20;
+  }
+
+  var freezeVerdict,freezeVClass,freezeFill;
+  if(!freezeAuth||freezeAuth==="null"||freezeAuth===null){
+    freezeVerdict="REVOKED [SAFE]";freezeVClass="safe";freezeFill=100;
+  }else{
+    freezeVerdict="LIVE [RISK]";freezeVClass="bad";freezeFill=20;
+  }
+
+  return renderTrustRow("MINT AUTH",mintVerdict,mintVClass,mintFill)+
+         renderTrustRow("FREEZE AUTH",freezeVerdict,freezeVClass,freezeFill)+
+         renderTrustRow("SUPPLY",supplyUI+" tokens","dim",50);
+}
+
+function renderTrustRow(key,verdict,cls,fillPct){
+  fillPct=fillPct===undefined?50:fillPct;
+  var barColor=cls==="safe"?"#00ff88":cls==="bad"?"#ff3300":cls==="warn"?"#ff6a00":"#3a2800";
+  return '<div class="trust-row">'+
+    '<span class="trust-key">'+key+'</span>'+
+    '<div class="trust-bar"><div class="trust-bar-fill" style="width:'+fillPct+'%;background:'+barColor+'"></div></div>'+
+    '<span class="trust-verdict '+cls+'">'+verdict+'</span>'+
+  '</div>';
+}
+
 // ── Custom Mint Lookup ─────────────────────────────────────────────
 var MINT_LOOKUP_TIMER=null;
 function onMintInput(){
@@ -406,7 +562,6 @@ async function lookupMint(){
   card.classList.remove("show");
   if(!addr){stat.textContent="";return;}
 
-  // Basic base58 validation
   if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr)){
     stat.className="mint-status err"; stat.textContent="✗ INVALID ADDRESS FORMAT"; return;
   }
@@ -414,7 +569,6 @@ async function lookupMint(){
   stat.className="mint-status loading"; stat.textContent="SCANNING CHAIN...";
 
   try{
-    // 1. Confirm it's a token mint
     var info=await rpcFetch("getAccountInfo",[addr,{encoding:"jsonParsed"}]);
     if(!info||!info.value){
       stat.className="mint-status err"; stat.textContent="✗ ACCOUNT NOT FOUND ON-CHAIN"; return;
@@ -425,16 +579,13 @@ async function lookupMint(){
       stat.className="mint-status err"; stat.textContent="✗ NOT A TOKEN MINT — check the address"; return;
     }
     var dec=parsed.info.decimals;
-    var supply=parsed.info.supply;
 
-    // 2. Fetch Metaplex metadata PDA for name/symbol
     var tokenName="UNKNOWN TOKEN", tokenSym=addr.slice(0,6)+"...", hasMetadata=false;
     try{
       var metaPDA=await getMetadataPDA(addr);
       var metaInfo=await rpcFetch("getAccountInfo",[metaPDA,{encoding:"base64"}]);
       if(metaInfo&&metaInfo.value&&metaInfo.value.data){
         var raw=Uint8Array.from(atob(metaInfo.value.data[0]),function(c){return c.charCodeAt(0);});
-        // Metaplex V1 layout: 1 discriminator + 32 update_auth + 32 mint + name(u32+bytes) + symbol(u32+bytes)
         var off=1+32+32;
         var nameLen=new DataView(raw.buffer).getUint32(off,true); off+=4;
         var rawName=new TextDecoder().decode(raw.slice(off,Math.min(off+nameLen,raw.length))).replace(/\0/g,"").trim();
@@ -445,12 +596,10 @@ async function lookupMint(){
         if(rawSym)  tokenSym=rawSym;
         hasMetadata=true;
       }
-    }catch(me){ /* no Metaplex metadata — pump.fun tokens may not have it */ }
+    }catch(me){}
 
-    // 3. Build the label (symbol preferred, fallback to name truncated)
     var label=tokenSym&&tokenSym.length<=12?tokenSym:(tokenName.slice(0,12)||addr.slice(0,6)+"...");
 
-    // 4. Add to token list if not already there
     var existing=ALL_TOKENS.filter(function(t){return t.mint===addr;})[0];
     if(!existing){
       ALL_TOKENS.push({label:label,mint:addr,dec:dec,balance:0});
@@ -458,19 +607,18 @@ async function lookupMint(){
       label=existing.label; tokenName=existing.label; tokenSym=existing.label;
     }
 
-    // 5. Set as buy token, re-render dropdown
     BUY_MINT=addr;
     renderDD("buy");
     document.getElementById("mintPaste").value="";
     stat.textContent="";
 
-    // 6. Show confidence card
     document.getElementById("tokCardName").textContent=tokenName;
     document.getElementById("tokCardSym").textContent=tokenSym+" · "+dec+" decimals";
     document.getElementById("tokCardAddr").textContent=addr.slice(0,16)+" ... "+addr.slice(-8);
     var note=!hasMetadata?"⚠ No on-chain metadata found (pump.fun / unverified token)":"✓ Metaplex metadata verified";
     document.getElementById("tokCardNote").textContent=note;
     card.classList.add("show");
+    triggerTrustDossier(addr);
     clearQuote();
 
   }catch(e){
@@ -480,7 +628,6 @@ async function lookupMint(){
 }
 
 async function getMetadataPDA(mintAddr){
-  // PDA: ["metadata", TOKEN_METADATA_PROGRAM_ID, mint]
   var enc=new TextEncoder();
   var seeds=[enc.encode("metadata"), b58decode(META_PROG), b58decode(mintAddr)];
   var PK=solanaWeb3.PublicKey;
@@ -488,7 +635,6 @@ async function getMetadataPDA(mintAddr){
   return pda.toBase58();
 }
 
-// Minimal base58 decoder for PDA seed derivation
 var B58_ALPHA="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function b58decode(str){
   var bytes=[0];
@@ -555,8 +701,96 @@ async function doConnect(){
     document.getElementById("bq").disabled=false;
     log("Ready. Select tokens → GET QUOTE.","dim");
     setInterval(refreshBlockhash,20000);
+    triggerTrustDossier(BUY_MINT);
   }catch(e){log("CONNECT ERROR: "+e.message,"err");}
   CONNECTING=false;
+}
+
+// ── FEATURE 7: TTL helpers ────────────────────────────────────────
+function stopTTL(){
+  if(TTL_INTERVAL){clearInterval(TTL_INTERVAL);TTL_INTERVAL=null;}
+}
+
+function startTTL(sellMint,buyMint,amt,slip){
+  stopTTL();
+  TTL_SECONDS=TTL_TOTAL=30;
+  TTL_SELL_MINT=sellMint; TTL_BUY_MINT=buyMint; TTL_AMT=amt; TTL_SLIP=slip;
+  var ttlEl=document.getElementById("quoteTTL");
+  ttlEl.classList.add("show");
+  updateTTLDisplay();
+  TTL_INTERVAL=setInterval(function(){
+    TTL_SECONDS--;
+    if(TTL_SECONDS<=0){
+      stopTTL();
+      document.getElementById("bs").disabled=true;
+      document.getElementById("quoteBox").style.opacity="0.4";
+      document.getElementById("ttlFill").style.width="0%";
+      document.getElementById("ttlFill").className="ttl-bar-fill critical";
+      document.getElementById("ttlSeconds").textContent="EXPIRED";
+      document.getElementById("ttlSeconds").className="ttl-seconds critical";
+      log("[QUOTE EXPIRED] Price may have changed — click GET QUOTE to refresh.","warn");
+      setTimeout(function(){
+        var curAmt=parseFloat(document.getElementById("sellAmt").value);
+        var curSlip=parseInt(document.getElementById("slip").value);
+        if(TTL_SELL_MINT===SELL_MINT&&TTL_BUY_MINT===BUY_MINT&&
+           curAmt===TTL_AMT&&curSlip===TTL_SLIP&&WP){
+          log("[AUTO-REFRESH] Re-fetching quote...","dim");
+          document.getElementById("quoteBox").style.opacity="1";
+          doQuote();
+        }
+      },1500);
+      return;
+    }
+    updateTTLDisplay();
+  },1000);
+}
+
+function updateTTLDisplay(){
+  var pct=(TTL_SECONDS/TTL_TOTAL)*100;
+  var fill=document.getElementById("ttlFill");
+  var secs=document.getElementById("ttlSeconds");
+  fill.style.width=pct+"%";
+  if(TTL_SECONDS<=5){
+    fill.className="ttl-bar-fill critical";
+    secs.className="ttl-seconds critical";
+  } else if(TTL_SECONDS<=10){
+    fill.className="ttl-bar-fill urgent";
+    secs.className="ttl-seconds urgent";
+  } else {
+    fill.className="ttl-bar-fill";
+    secs.className="ttl-seconds";
+  }
+  secs.textContent=TTL_SECONDS+"s";
+}
+
+// ── FEATURE 5: Liquidity Depth ────────────────────────────────────
+async function fetchDepth(inputMint,outputMint,amtRaw){
+  try{
+    // Quote 10x the trade size to measure how the pool handles large orders
+    var bigAmt=Math.min(amtRaw*10, amtRaw+1000000000); // cap at +1B raw units
+    var url=JUP_QUOTE+"?inputMint="+inputMint+"&outputMint="+outputMint
+      +"&amount="+bigAmt+"&slippageBps=5000&swapMode=ExactIn";
+    var r=await fetch(url);
+    if(!r.ok) return null;
+    var q=await r.json();
+    if(q.error||!q.outAmount) return null;
+    return {impact:parseFloat(q.priceImpactPct||0)*100};
+  }catch(e){return null;}
+}
+
+function renderDepth(impact){
+  var filled,label,cls;
+  if(impact<0.5){filled=10;label="LIQUID";cls="liquid";}
+  else if(impact<2){filled=7;label="ADEQUATE";cls="mid";}
+  else if(impact<8){filled=4;label="THIN — watch size";cls="thin";}
+  else{filled=1;label="DRY — small sizes only";cls="dry";}
+  var bar="";
+  for(var i=0;i<10;i++) bar+=(i<filled?"█":"░");
+  document.getElementById("depthBarAscii").textContent=bar;
+  var v=document.getElementById("depthVerdict");
+  v.textContent="["+label+"]";
+  v.className="depth-verdict "+cls;
+  document.getElementById("depthRow").style.display="flex";
 }
 
 // ── Quote ──────────────────────────────────────────────────────────
@@ -572,6 +806,7 @@ async function doQuote(){
   if(!buy){log("ERROR: Select a buy token.","err");return;}
 
   clearQuote();
+  document.getElementById("quoteBox").style.opacity="1";
   document.getElementById("bq").disabled=true;
   document.getElementById("bq").textContent="FETCHING...";
   log("\n--- FETCHING QUOTE ---","info");
@@ -615,6 +850,15 @@ async function doQuote(){
     log("QUOTE OK: sell "+amt+" "+sell.label+" → ~"+outUI.toLocaleString(undefined,{maximumFractionDigits:4})+" "+buy.label,"hi");
     log("Impact: "+impStr+" | Route: "+route.slice(0,60),"dim");
     if(impact>=3) log("WARNING: High price impact ("+impStr+"). Consider smaller amount.","warn");
+
+    // Start 30s TTL countdown
+    startTTL(SELL_MINT,BUY_MINT,amt,slip);
+
+    // Depth check in background — non-blocking
+    fetchDepth(SELL_MINT,BUY_MINT,amtRaw).then(function(d){
+      if(d!==null&&LAST_QUOTE) renderDepth(d.impact);
+    });
+
     refreshBlockhash();
 
   }catch(e){
@@ -628,12 +872,9 @@ async function doQuote(){
 async function doSwap(){
   if(!LAST_QUOTE){log("ERROR: Get a quote first.","err");return;}
   if(!WP){log("ERROR: Connect wallet first.","err");return;}
+  if(!JUP_SWAP||JUP_SWAP.length<10){log("ERROR: Swap proxy not configured.","err");return;}
 
-  // Sanity check Worker URL is real
-  if(!JUP_SWAP||JUP_SWAP.length<10){
-    log("ERROR: Swap proxy not configured.","err"); return;
-  }
-
+  stopTTL();
   document.getElementById("bs").disabled=true;
   document.getElementById("bq").disabled=true;
   log("\n--- EXECUTING SWAP ---","info");
@@ -643,9 +884,7 @@ async function doSwap(){
     var addr=WP.toBase58();
     log("Building transaction via Jupiter...","dim");
 
-    // Strip platformFee from quote — prevents 400 "feeAccount is required" error
-    // if the API key was created with a platform fee config
-    var cleanQuote = Object.assign({}, LAST_QUOTE);
+    var cleanQuote=Object.assign({},LAST_QUOTE);
     delete cleanQuote.platformFee;
 
     var swapRes=await fetch(JUP_SWAP,{
@@ -697,13 +936,13 @@ async function doSwap(){
     try{var nb=(await rpcFetch("getBalance",[addr])).value/1e9;document.getElementById("b").textContent=nb.toFixed(4)+" SOL";}catch(e){}
 
     var sell=getTokByMint(SELL_MINT), buy=getTokByMint(BUY_MINT);
-    var amt=document.getElementById("sellAmt").value;
+    var swapAmt=document.getElementById("sellAmt").value;
     var outUI=(parseInt(LAST_QUOTE.outAmount)/Math.pow(10,buy.dec));
     LAST_QUOTE=null; clearQuote();
 
     log("\n================================","green");
     log("  SWAP COMPLETE","green");
-    log("  SOLD  : "+parseFloat(amt).toLocaleString()+" "+sell.label,"green");
+    log("  SOLD  : "+parseFloat(swapAmt).toLocaleString()+" "+sell.label,"green");
     log("  GOT   : ~"+outUI.toLocaleString(undefined,{maximumFractionDigits:4})+" "+buy.label,"green");
     log("  TX    : "+sig.slice(0,20)+"...","green");
     log("================================\n","green");
@@ -712,6 +951,11 @@ async function doSwap(){
     log("\nSWAP ERROR: "+e.message,"err");
     console.error(e);
     document.getElementById("bs").disabled=false;
+    if(LAST_QUOTE){
+      var curAmt=parseFloat(document.getElementById("sellAmt").value);
+      var curSlip=parseInt(document.getElementById("slip").value);
+      startTTL(SELL_MINT,BUY_MINT,curAmt,curSlip);
+    }
   }
   document.getElementById("bq").disabled=false;
 }
