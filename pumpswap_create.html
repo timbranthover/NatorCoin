@@ -43,7 +43,7 @@ a{color:#ff6a00;text-decoration:none}a:hover{text-decoration:underline}
 <div class="nav">
   <a href="index.html" class="nav-home">&#8592; HOME</a>
   <a href="swap.html">Swap</a>
-  <a href="nator_send.html">Transfer</a>
+  <a href="transfer.html">Transfer</a>
 </div>
 
 <h1>&#9608; NATOR <span>//</span> PUMPSWAP POOL CREATE &#9608;</h1>
@@ -101,7 +101,7 @@ var SRC_ACCT   = "CcJVJ76JG9KxdXU2ZZaj2kjD2ik2Ws1R1Uk7V4Hxe77p"; // existing non
 var ATA_ADDR   = "5dZTkKUBmhutvBsEVTbSwkNTSHavZvuMx8nSBJQRZq8T"; // derived ATA
 var PUMPSWAP   = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
 var TOKEN_PROG = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-var ASSOC_PROG = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe8bXh";
+var ASSOC_PROG = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 var WSOL_MINT  = "So11111111111111111111111111111111111111112";
 var RPCS       = ["https://api.mainnet-beta.solana.com","https://solana-rpc.publicnode.com"];
 var NATOR_DECIMALS = 9;
@@ -250,18 +250,17 @@ async function doCreateATA(){
     return true;
   }
 
-  // createAssociatedTokenAccountInstruction
-  // Accounts: [funding (signer+writable), ata (writable), owner, mint, system, token, sysvarRent]
+  // createAssociatedTokenAccountInstruction — exactly 6 accounts, no SysvarRent
+  // Order: payer, ata, owner, mint, system_program, token_program
   var keys = [
-    {pubkey: WP,                              isSigner:true,  isWritable:true},
-    {pubkey: new PK(ATA_ADDR),               isSigner:false, isWritable:true},
-    {pubkey: WP,                              isSigner:false, isWritable:false},
-    {pubkey: new PK(NATOR_MINT),             isSigner:false, isWritable:false},
-    {pubkey: solanaWeb3.SystemProgram.programId, isSigner:false, isWritable:false},
-    {pubkey: new PK(TOKEN_PROG),             isSigner:false, isWritable:false},
-    {pubkey: new PK("SysvarRent111111111111111111111111111111111"), isSigner:false, isWritable:false},
+    {pubkey: WP,                                  isSigner:true,  isWritable:true},   // payer
+    {pubkey: new PK(ATA_ADDR),                   isSigner:false, isWritable:true},   // ata
+    {pubkey: WP,                                  isSigner:false, isWritable:false},  // owner
+    {pubkey: new PK(NATOR_MINT),                 isSigner:false, isWritable:false},  // mint
+    {pubkey: solanaWeb3.SystemProgram.programId, isSigner:false, isWritable:false},  // system_program
+    {pubkey: new PK(TOKEN_PROG),                 isSigner:false, isWritable:false},  // token_program
   ];
-  // createAssociatedTokenAccount instruction data is empty (0 bytes)
+  // instruction data is empty — no discriminator needed
   var ix = new TI({keys: keys, programId: new PK(ASSOC_PROG), data: new Uint8Array(0)});
 
   var tx = new TX();
