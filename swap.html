@@ -30,7 +30,9 @@ button:hover:not(:disabled){background:#ffb000;color:#0a0700}
 button:disabled{border-color:#3a2800;color:#3a2800;cursor:not-allowed}
 .btn-connect{border-color:#ff6a00;color:#ff6a00}
 .btn-connect:hover:not(:disabled){background:#ff6a00;color:#0a0700}
-.btn-quote{border-color:#ffb000}
+.btn-quote{border-color:#ffb000;min-width:152px}
+.btn-quote.fetching{border-color:#ff6a00;color:#ff6a00;animation:pulse-quote 0.7s ease-in-out infinite alternate}
+@keyframes pulse-quote{from{opacity:1}to{opacity:0.45}}
 .btn-swap{border-color:#00ff88;color:#00ff88;font-size:14px;padding:12px 32px}
 .btn-swap:hover:not(:disabled){background:#00ff88;color:#0a0700}
 .pct-btns{display:flex;gap:4px;margin-top:4px}
@@ -310,6 +312,7 @@ a:hover{text-decoration:underline}
     <div class="qrow"><span class="qkey">RATE</span><span class="qval" id="qRate">--</span></div>
     <div class="qrow"><span class="qkey">PRICE IMPACT</span><span class="qval" id="qImpact">--</span></div>
     <div class="qrow"><span class="qkey">ROUTE</span><span class="qval" id="qRoute">--</span></div>
+    <div class="qrow"><span class="qkey">MKT CAP</span><span class="qval" id="qMcap" style="color:#c87800">--</span></div>
     <!-- FEATURE 5: Depth row inside quote box — always in flow, fades in -->
     <div class="depth-row" id="depthRow">
       <span class="qkey">DEPTH</span>
@@ -783,6 +786,55 @@ function updateTTLDisplay(){
   secs.textContent=TTL_SECONDS+"s";
 }
 
+// ── Market Cap fetch ──────────────────────────────────────────────
+// Uses Jupiter price API + on-chain supply. Non-blocking, fires after quote.
+var MCAP_CACHE={};
+async function fetchMcap(mint){
+  if(MCAP_CACHE[mint]) return MCAP_CACHE[mint];
+  // 1. Get USD price from Jupiter
+  var priceUrl="https://api.jup.ag/price/v2?ids="+mint;
+  var priceRes=await fetch(priceUrl);
+  if(!priceRes.ok) return null;
+  var priceJson=await priceRes.json();
+  var price=priceJson.data&&priceJson.data[mint]&&parseFloat(priceJson.data[mint].price);
+  if(!price||price<=0) return null;
+  // 2. Get supply — reuse trust cache if already fetched, else RPC call
+  var supply=null, dec=9;
+  try{
+    var info=await rpcFetch("getAccountInfo",[mint,{encoding:"jsonParsed"}]);
+    if(info&&info.value&&info.value.data&&info.value.data.parsed){
+      var pi=info.value.data.parsed.info;
+      supply=parseInt(pi.supply||0);
+      dec=pi.decimals;
+    }
+  }catch(e){}
+  if(!supply) return null;
+  var supplyUI=supply/Math.pow(10,dec);
+  var mcap=price*supplyUI;
+  var result=formatMcap(mcap);
+  MCAP_CACHE[mint]=result;
+  return result;
+}
+
+function formatMcap(v){
+  var cls="";
+  var str;
+  if(v>=1e9){str="$"+(v/1e9).toFixed(2)+"B";cls="green";}
+  else if(v>=1e6){str="$"+(v/1e6).toFixed(2)+"M";cls=(v>=10e6?"green":"ok");}
+  else if(v>=1e3){str="$"+(v/1e3).toFixed(1)+"K";cls="warn";}
+  else{str="$"+v.toFixed(0);cls="bad";}
+  return {str:str,cls:cls};
+}
+
+function renderMcap(result){
+  var el=document.getElementById("qMcap");
+  if(!result){el.textContent="N/A";el.style.color="";return;}
+  el.textContent=result.str;
+  // Map class to color inline since qMcap starts with a custom color
+  var colorMap={green:"#00ff88",ok:"#ffb000",warn:"#ff6a00",bad:"#ff3300"};
+  el.style.color=colorMap[result.cls]||"#c87800";
+}
+
 // ── FEATURE 5: Liquidity Depth ────────────────────────────────────
 async function fetchDepth(inputMint,outputMint,amtRaw){
   try{
@@ -828,7 +880,7 @@ async function doQuote(){
   clearQuote();
   document.getElementById("quoteBox").style.opacity=""; // let CSS class handle it
   document.getElementById("bq").disabled=true;
-  document.getElementById("bq").textContent="FETCHING...";
+  document.getElementById("bq").classList.add("fetching");
   log("\n--- FETCHING QUOTE ---","info");
   log("Selling "+amt+" "+sell.label+" → "+buy.label+" (slip: "+(slip/100)+"%)","dim");
 
@@ -864,6 +916,8 @@ async function doQuote(){
     document.getElementById("qRoute").textContent=route.length>60?route.slice(0,57)+"...":route;
     document.getElementById("qMin").textContent=minUI.toLocaleString(undefined,{maximumFractionDigits:buy.dec})+" "+buy.label;
     document.getElementById("qSlip").textContent=(slip/100).toFixed(1)+"%";
+    document.getElementById("qMcap").textContent="...";
+    document.getElementById("qMcap").style.color="#7a5200";
     document.getElementById("quoteBox").classList.add("show");
     document.getElementById("bs").disabled=false;
 
@@ -873,6 +927,14 @@ async function doQuote(){
 
     // Start 30s TTL countdown
     startTTL(SELL_MINT,BUY_MINT,amt,slip);
+
+    // Market cap — non-blocking
+    var mcapMint=BUY_MINT;
+    fetchMcap(mcapMint).then(function(result){
+      if(LAST_QUOTE&&BUY_MINT===mcapMint) renderMcap(result);
+    }).catch(function(){
+      if(LAST_QUOTE&&BUY_MINT===mcapMint) renderMcap(null);
+    });
 
     // Depth check in background — non-blocking
     fetchDepth(SELL_MINT,BUY_MINT,amtRaw).then(function(d){
@@ -885,7 +947,7 @@ async function doQuote(){
     log("QUOTE ERROR: "+e.message,"err");
   }
   document.getElementById("bq").disabled=false;
-  document.getElementById("bq").textContent="&#9654; GET QUOTE";
+  document.getElementById("bq").classList.remove("fetching");
 }
 
 // ── Swap ───────────────────────────────────────────────────────────
