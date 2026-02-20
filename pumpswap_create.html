@@ -298,6 +298,45 @@ async function doFundATA(natorAmount){
   return true;
 }
 
+// ─── Step 2.5: Create WSOL ATA ───────────────────────────────────────────────
+async function doCreateWsolATA(){
+  var PK = solanaWeb3.PublicKey, TX = solanaWeb3.Transaction, TI = solanaWeb3.TransactionInstruction;
+  log("\n[STEP 2.5] Checking WSOL ATA...","info");
+
+  var tokProg  = new PK(TOKEN_PROG);
+  var assocProg= new PK(ASSOC_PROG);
+  var wsolMint = new PK(WSOL_MINT);
+
+  // Derive WSOL ATA for our wallet
+  var [wsolATA] = PK.findProgramAddressSync(
+    [WP.toBuffer(), tokProg.toBuffer(), wsolMint.toBuffer()], assocProg
+  );
+  log("  WSOL ATA: " + wsolATA.toBase58(),"dim");
+
+  // Check if already exists
+  var info = await CN.getAccountInfo(wsolATA);
+  if(info){
+    log("  WSOL ATA already exists — skipping.","dim");
+    return wsolATA;
+  }
+
+  log("  Creating WSOL ATA...","info");
+  var keys = [
+    {pubkey: WP,       isSigner:true,  isWritable:true},
+    {pubkey: wsolATA,  isSigner:false, isWritable:true},
+    {pubkey: WP,       isSigner:false, isWritable:false},
+    {pubkey: wsolMint, isSigner:false, isWritable:false},
+    {pubkey: solanaWeb3.SystemProgram.programId, isSigner:false, isWritable:false},
+    {pubkey: tokProg,  isSigner:false, isWritable:false},
+  ];
+  var ix = new TI({keys: keys, programId: assocProg, data: new Uint8Array(0)});
+  var tx = new TX();
+  tx.add(ix);
+  await sendAndConfirm(tx, [], "Create WSOL ATA");
+  log("  WSOL ATA created: " + wsolATA.toBase58(),"hi");
+  return wsolATA;
+}
+
 // ─── Step 3: Create PumpSwap Pool ─────────────────────────────────────────────
 async function doCreatePool(natorSeed, solSeed){
   var PK = solanaWeb3.PublicKey, TX = solanaWeb3.Transaction, TI = solanaWeb3.TransactionInstruction,
@@ -460,6 +499,10 @@ async function doAll(){
     } else {
       log("[STEP 2] ATA already has enough NATOR (" + ataBalance.toLocaleString() + ") — skipping transfer.","dim");
     }
+
+    // Step 2.5: Create WSOL ATA (required by PumpSwap create_pool)
+    await doCreateWsolATA();
+    await new Promise(r=>setTimeout(r,2000));
 
     // Step 3: Create pool
     var poolAddr = await doCreatePool(natorSeed, solSeed);
