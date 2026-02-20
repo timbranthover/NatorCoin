@@ -644,11 +644,16 @@ async function doSwap(){
     var addr=WP.toBase58();
     log("Building transaction via Jupiter...","dim");
 
+    // Strip platformFee from quote — prevents 400 "feeAccount is required" error
+    // if the API key was created with a platform fee config
+    var cleanQuote = Object.assign({}, LAST_QUOTE);
+    delete cleanQuote.platformFee;
+
     var swapRes=await fetch(JUP_SWAP,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
-        quoteResponse:LAST_QUOTE,
+        quoteResponse:cleanQuote,
         userPublicKey:addr,
         wrapAndUnwrapSol:true,
         dynamicComputeUnitLimit:true,
