@@ -262,7 +262,7 @@ async function doCreateATA(){
     {pubkey: new PK("SysvarRent111111111111111111111111111111111"), isSigner:false, isWritable:false},
   ];
   // createAssociatedTokenAccount instruction data is empty (0 bytes)
-  var ix = new TI({keys: keys, programId: new PK(ASSOC_PROG), data: Buffer.alloc(0)});
+  var ix = new TI({keys: keys, programId: new PK(ASSOC_PROG), data: new Uint8Array(0)});
 
   var tx = new TX();
   tx.add(ix);
@@ -317,9 +317,10 @@ async function doCreatePool(natorSeed, solSeed){
 
   // Find pool PDA — index 0
   var poolIndex = 0;
-  var idxBuf = Buffer.alloc(2); idxBuf.writeUInt16LE(poolIndex, 0);
+  var idxBuf = new Uint8Array(2); new DataView(idxBuf.buffer).setUint16(0, poolIndex, true);
+  var enc = new TextEncoder();
   var [poolPDA] = PK.findProgramAddressSync(
-    [Buffer.from("pool"), baseMint.toBuffer(), quoteMint.toBuffer(), idxBuf],
+    [enc.encode("pool"), baseMint.toBuffer(), quoteMint.toBuffer(), idxBuf],
     pumpProg
   );
   log("  Pool PDA: " + poolPDA.toBase58(),"dim");
@@ -342,7 +343,7 @@ async function doCreatePool(natorSeed, solSeed){
   );
   // LP mint PDA
   var [lpMint] = PK.findProgramAddressSync(
-    [Buffer.from("pool_lp_mint"), poolPDA.toBuffer()],
+    [enc.encode("pool_lp_mint"), poolPDA.toBuffer()],
     pumpProg
   );
   // User LP ATA
@@ -352,13 +353,7 @@ async function doCreatePool(natorSeed, solSeed){
   );
   // Config PDA (global PumpSwap config)
   var [configPDA] = PK.findProgramAddressSync(
-    [Buffer.from("global_config")],
-    pumpProg
-  );
-  // Fee recipient token account for WSOL (platform fee)
-  // Using well-known PumpSwap fee config account
-  var [feeRecipientTA] = PK.findProgramAddressSync(
-    [Buffer.from("fee_recipient")],
+    [enc.encode("global_config")],
     pumpProg
   );
 
@@ -371,19 +366,19 @@ async function doCreatePool(natorSeed, solSeed){
   var solRaw   = BigInt(Math.round(solSeed * 1e9));
 
   // Build createPool instruction
-  // Discriminator for PumpSwap "create_pool" = first 8 bytes of sha256("global:create_pool")
-  // Standard Anchor discriminator
-  var discriminator = Buffer.from([233, 146, 209, 142, 207, 104, 64, 188]); // create_pool anchor discriminator for pAMM
+  // Anchor discriminator for PumpSwap "create_pool" on pAMMBay6...
+  var discBytes = [233, 146, 209, 142, 207, 104, 64, 188];
 
-  // Instruction data: discriminator(8) + index(2) + base_amount(8) + quote_amount(8)
-  var data = Buffer.alloc(26);
-  discriminator.copy(data, 0);
-  data.writeUInt16LE(poolIndex, 8);
-  data.writeBigUInt64LE(natorRaw, 10);
-  data.writeBigUInt64LE(solRaw, 18);
+  // Instruction data: discriminator(8) + index(2) + base_amount(8) + quote_amount(8) = 26 bytes
+  var data = new Uint8Array(26);
+  var dv = new DataView(data.buffer);
+  for(var i=0;i<8;i++) data[i] = discBytes[i];
+  dv.setUint16(8,  poolIndex, true);   // u16 little-endian
+  dv.setBigUint64(10, natorRaw, true); // u64 little-endian
+  dv.setBigUint64(18, solRaw,   true); // u64 little-endian
 
   log("  Building create_pool instruction...","dim");
-  log("  Discriminator: " + discriminator.toString('hex'),"dim");
+  log("  Discriminator: " + discBytes.map(b=>b.toString(16).padStart(2,'0')).join(''),"dim");
 
   var ix = new TI({
     programId: pumpProg,
