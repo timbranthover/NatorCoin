@@ -99,9 +99,15 @@ select.slip-sel option{background:#0d0900;color:#ffb000}
 }
 .mint-input-row .mint-btn:hover{background:#1a0e00;color:#ffb000}
 .mint-status{font-size:11px;margin-top:4px;letter-spacing:1px;min-height:16px}
-.mint-status.ok{color:#00ff88}
 .mint-status.err{color:#ff3300}
 .mint-status.loading{color:#ff6a00}
+/* Token confirm card */
+.tok-card{display:none;margin-top:8px;border:1px solid #00ff88;background:#040300;padding:10px 12px}
+.tok-card.show{display:block}
+.tok-card-name{color:#00ff88;font-size:14px;font-weight:bold;letter-spacing:2px}
+.tok-card-sym{color:#ffb000;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin-top:2px}
+.tok-card-addr{color:#7a5200;font-size:10px;letter-spacing:1px;margin-top:4px;word-break:break-all}
+.tok-card-note{color:#ff6a00;font-size:10px;letter-spacing:1px;margin-top:4px}
 
 /* Log */
 #log{white-space:pre-wrap;margin-top:16px;border:1px solid #7a5200;padding:14px;
@@ -194,6 +200,12 @@ a:hover{text-decoration:underline}
     <button class="mint-btn" onclick="lookupMint()">LOOKUP</button>
   </div>
   <div class="mint-status" id="mintStatus"></div>
+  <div class="tok-card" id="tokCard">
+    <div class="tok-card-name" id="tokCardName">--</div>
+    <div class="tok-card-sym" id="tokCardSym">--</div>
+    <div class="tok-card-addr" id="tokCardAddr">--</div>
+    <div class="tok-card-note" id="tokCardNote"></div>
+  </div>
 
   <label>Slippage Tolerance</label>
   <select id="slip" class="slip-sel">
@@ -239,7 +251,7 @@ Connect wallet → select tokens → GET QUOTE → EXECUTE SWAP
 // Worker proxies POST to api.jup.ag/swap/v1/swap, injects API key, returns CORS headers.
 // Until Worker is live: quote works, swap will fail (CORS).
 var JUP_QUOTE    = "https://public.jupiterapi.com/quote";
-var JUP_SWAP     = "https://jup-swap-proxy.YOURNAME.workers.dev"; // ← replace with Worker URL
+var JUP_SWAP     = "https://square-fog-2a16.timbranthover.workers.dev";
 var RPCS = ["https://solana-rpc.publicnode.com","https://api.mainnet-beta.solana.com"];
 
 var SOL_MINT  = "So11111111111111111111111111111111111111112";
@@ -384,68 +396,87 @@ function onMintInput(){
   var v=document.getElementById("mintPaste").value.trim();
   document.getElementById("mintStatus").className="mint-status";
   document.getElementById("mintStatus").textContent="";
+  if(!v) document.getElementById("tokCard").classList.remove("show");
   if(v.length>=32) MINT_LOOKUP_TIMER=setTimeout(lookupMint,600);
 }
 
 async function lookupMint(){
   var addr=document.getElementById("mintPaste").value.trim();
   var stat=document.getElementById("mintStatus");
+  var card=document.getElementById("tokCard");
+  card.classList.remove("show");
   if(!addr){stat.textContent="";return;}
 
   // Basic base58 validation
   if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr)){
-    stat.className="mint-status err"; stat.textContent="INVALID ADDRESS FORMAT"; return;
+    stat.className="mint-status err"; stat.textContent="✗ INVALID ADDRESS FORMAT"; return;
   }
 
-  stat.className="mint-status loading"; stat.textContent="LOOKING UP...";
+  stat.className="mint-status loading"; stat.textContent="SCANNING CHAIN...";
 
   try{
-    // 1. Confirm it's a token mint via getAccountInfo
+    // 1. Confirm it's a token mint
     var info=await rpcFetch("getAccountInfo",[addr,{encoding:"jsonParsed"}]);
     if(!info||!info.value){
-      stat.className="mint-status err"; stat.textContent="ACCOUNT NOT FOUND ON-CHAIN"; return;
+      stat.className="mint-status err"; stat.textContent="✗ ACCOUNT NOT FOUND ON-CHAIN"; return;
     }
     var parsed=info.value.data&&info.value.data.parsed;
-    var isMint = parsed&&parsed.type==="mint";
-    var dec=isMint?parsed.info.decimals:9; // fallback dec if metadata-only
+    var isMint=parsed&&parsed.type==="mint";
+    if(!isMint){
+      stat.className="mint-status err"; stat.textContent="✗ NOT A TOKEN MINT — check the address"; return;
+    }
+    var dec=parsed.info.decimals;
+    var supply=parsed.info.supply;
 
     // 2. Fetch Metaplex metadata PDA for name/symbol
-    var label=addr.slice(0,6)+"...";
+    var tokenName="UNKNOWN TOKEN", tokenSym=addr.slice(0,6)+"...", hasMetadata=false;
     try{
       var metaPDA=await getMetadataPDA(addr);
       var metaInfo=await rpcFetch("getAccountInfo",[metaPDA,{encoding:"base64"}]);
       if(metaInfo&&metaInfo.value&&metaInfo.value.data){
         var raw=Uint8Array.from(atob(metaInfo.value.data[0]),function(c){return c.charCodeAt(0);});
-        // Metaplex metadata layout: 1 key + 32 update_auth + 32 mint + name(4+n) + symbol(4+n)
+        // Metaplex V1 layout: 1 discriminator + 32 update_auth + 32 mint + name(u32+bytes) + symbol(u32+bytes)
         var off=1+32+32;
         var nameLen=new DataView(raw.buffer).getUint32(off,true); off+=4;
-        var name=new TextDecoder().decode(raw.slice(off,off+nameLen)).replace(/\0/g,""); off+=nameLen;
+        var rawName=new TextDecoder().decode(raw.slice(off,Math.min(off+nameLen,raw.length))).replace(/\0/g,"").trim();
+        off+=nameLen;
         var symLen=new DataView(raw.buffer).getUint32(off,true); off+=4;
-        var sym=new TextDecoder().decode(raw.slice(off,off+symLen)).replace(/\0/g,"");
-        if(sym&&sym.trim()) label=sym.trim();
-        else if(name&&name.trim()) label=name.trim().slice(0,10);
+        var rawSym=new TextDecoder().decode(raw.slice(off,Math.min(off+symLen,raw.length))).replace(/\0/g,"").trim();
+        if(rawName) tokenName=rawName;
+        if(rawSym)  tokenSym=rawSym;
+        hasMetadata=true;
       }
-    }catch(me){}
+    }catch(me){ /* no Metaplex metadata — pump.fun tokens may not have it */ }
 
-    // 3. Add to token list if not already there
+    // 3. Build the label (symbol preferred, fallback to name truncated)
+    var label=tokenSym&&tokenSym.length<=12?tokenSym:(tokenName.slice(0,12)||addr.slice(0,6)+"...");
+
+    // 4. Add to token list if not already there
     var existing=ALL_TOKENS.filter(function(t){return t.mint===addr;})[0];
     if(!existing){
       ALL_TOKENS.push({label:label,mint:addr,dec:dec,balance:0});
     } else {
-      label=existing.label;
+      label=existing.label; tokenName=existing.label; tokenSym=existing.label;
     }
 
-    // 4. Set as buy token and re-render
+    // 5. Set as buy token, re-render dropdown
     BUY_MINT=addr;
     renderDD("buy");
     document.getElementById("mintPaste").value="";
-    stat.className="mint-status ok";
-    stat.textContent="ADDED: "+label+" ("+addr.slice(0,8)+"..."+addr.slice(-4)+")";
+    stat.textContent="";
+
+    // 6. Show confidence card
+    document.getElementById("tokCardName").textContent=tokenName;
+    document.getElementById("tokCardSym").textContent=tokenSym+" · "+dec+" decimals";
+    document.getElementById("tokCardAddr").textContent=addr.slice(0,16)+" ... "+addr.slice(-8);
+    var note=!hasMetadata?"⚠ No on-chain metadata found (pump.fun / unverified token)":"✓ Metaplex metadata verified";
+    document.getElementById("tokCardNote").textContent=note;
+    card.classList.add("show");
     clearQuote();
 
   }catch(e){
     stat.className="mint-status err";
-    stat.textContent="LOOKUP FAILED: "+(e.message||"unknown error");
+    stat.textContent="✗ LOOKUP FAILED: "+(e.message||"unknown error");
   }
 }
 
@@ -599,11 +630,9 @@ async function doSwap(){
   if(!LAST_QUOTE){log("ERROR: Get a quote first.","err");return;}
   if(!WP){log("ERROR: Connect wallet first.","err");return;}
 
-  // Check Worker is configured
-  if(JUP_SWAP.indexOf("YOURNAME")>-1){
-    log("ERROR: Cloudflare Worker not configured. See HANDOVER.md.","err");
-    log("Need: deploy Worker → update JUP_SWAP constant in this file.","dim");
-    return;
+  // Sanity check Worker URL is real
+  if(!JUP_SWAP||JUP_SWAP.length<10){
+    log("ERROR: Swap proxy not configured.","err"); return;
   }
 
   document.getElementById("bs").disabled=true;
