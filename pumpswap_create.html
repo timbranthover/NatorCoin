@@ -301,102 +301,109 @@ async function doFundATA(natorAmount){
 // ─── Step 3: Create PumpSwap Pool ─────────────────────────────────────────────
 async function doCreatePool(natorSeed, solSeed){
   var PK = solanaWeb3.PublicKey, TX = solanaWeb3.Transaction, TI = solanaWeb3.TransactionInstruction,
-      KP = solanaWeb3.Keypair, SP = solanaWeb3.SystemProgram;
+      SP = solanaWeb3.SystemProgram;
 
   log("\n[STEP 3] Creating PumpSwap NATOR/SOL pool...","info");
   log("  Seed: " + natorSeed.toLocaleString() + " NATOR + " + solSeed + " SOL","info");
 
-  // PumpSwap CPMM pool creation:
-  // The pool PDA is derived from: ["pool", base_mint, quote_mint, index]
-  // base = NATOR, quote = WSOL
-  // index starts at 0
+  var enc      = new TextEncoder();
   var pumpProg = new PK(PUMPSWAP);
-  var baseMint  = new PK(NATOR_MINT);
-  var quoteMint = new PK(WSOL_MINT);
+  var baseMint = new PK(NATOR_MINT);
+  var quoteMint= new PK(WSOL_MINT);
+  var tokProg  = new PK(TOKEN_PROG);
+  var tok22    = new PK("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+  var assocProg= new PK(ASSOC_PROG);
 
-  // Find pool PDA — index 0
+  // ── Pool PDA: seeds = ["pool", index_u16_le, creator, base_mint, quote_mint]
   var poolIndex = 0;
   var idxBuf = new Uint8Array(2); new DataView(idxBuf.buffer).setUint16(0, poolIndex, true);
-  var enc = new TextEncoder();
   var [poolPDA] = PK.findProgramAddressSync(
-    [enc.encode("pool"), baseMint.toBuffer(), quoteMint.toBuffer(), idxBuf],
+    [enc.encode("pool"), idxBuf, WP.toBuffer(), baseMint.toBuffer(), quoteMint.toBuffer()],
     pumpProg
   );
-  log("  Pool PDA: " + poolPDA.toBase58(),"dim");
+  log("  Pool PDA:         " + poolPDA.toBase58(),"dim");
 
-  // Pool base token account (pool's ATA for NATOR)
-  var [poolBaseTA] = PK.findProgramAddressSync(
-    [WP.toBuffer(), new PK(TOKEN_PROG).toBuffer(), baseMint.toBuffer()],
-    new PK(ASSOC_PROG)
-  );
-  // Actually pool token accounts are owned by the pool PDA, not the user wallet
-  // Pool's NATOR ATA: owner = poolPDA
-  var [poolNatorATA] = PK.findProgramAddressSync(
-    [poolPDA.toBuffer(), new PK(TOKEN_PROG).toBuffer(), baseMint.toBuffer()],
-    new PK(ASSOC_PROG)
-  );
-  // Pool's WSOL ATA: owner = poolPDA
-  var [poolWsolATA] = PK.findProgramAddressSync(
-    [poolPDA.toBuffer(), new PK(TOKEN_PROG).toBuffer(), quoteMint.toBuffer()],
-    new PK(ASSOC_PROG)
-  );
-  // LP mint PDA
+  // ── LP Mint PDA: seeds = ["pool_lp_mint", pool] — owned by Token-2022
   var [lpMint] = PK.findProgramAddressSync(
     [enc.encode("pool_lp_mint"), poolPDA.toBuffer()],
     pumpProg
   );
-  // User LP ATA
-  var [userLpATA] = PK.findProgramAddressSync(
-    [WP.toBuffer(), new PK(TOKEN_PROG).toBuffer(), lpMint.toBuffer()],
-    new PK(ASSOC_PROG)
-  );
-  // Config PDA (global PumpSwap config)
-  var [configPDA] = PK.findProgramAddressSync(
-    [enc.encode("global_config")],
-    pumpProg
-  );
-
-  log("  Pool NATOR vault: " + poolNatorATA.toBase58(),"dim");
-  log("  Pool WSOL vault:  " + poolWsolATA.toBase58(),"dim");
   log("  LP Mint:          " + lpMint.toBase58(),"dim");
 
-  // Amounts
+  // ── Global config PDA
+  var [configPDA] = PK.findProgramAddressSync([enc.encode("global_config")], pumpProg);
+
+  // ── Event authority PDA: seeds = ["__event_authority"]
+  var [eventAuth] = PK.findProgramAddressSync([enc.encode("__event_authority")], pumpProg);
+
+  // ── Pool vaults: ATAs owned by pool PDA
+  // Pool NATOR vault — base token uses classic SPL token program
+  var [poolBaseTA] = PK.findProgramAddressSync(
+    [poolPDA.toBuffer(), tokProg.toBuffer(), baseMint.toBuffer()], assocProg
+  );
+  // Pool WSOL vault — quote token uses classic SPL token program
+  var [poolQuoteTA] = PK.findProgramAddressSync(
+    [poolPDA.toBuffer(), tokProg.toBuffer(), quoteMint.toBuffer()], assocProg
+  );
+
+  // ── User quote token account (WSOL ATA for our wallet)
+  var [userQuoteTA] = PK.findProgramAddressSync(
+    [WP.toBuffer(), tokProg.toBuffer(), quoteMint.toBuffer()], assocProg
+  );
+
+  // ── User LP token account — uses Token-2022 program for LP mint
+  var [userLpTA] = PK.findProgramAddressSync(
+    [WP.toBuffer(), tok22.toBuffer(), lpMint.toBuffer()], assocProg
+  );
+
+  log("  Pool NATOR vault: " + poolBaseTA.toBase58(),"dim");
+  log("  Pool WSOL vault:  " + poolQuoteTA.toBase58(),"dim");
+  log("  User WSOL ATA:    " + userQuoteTA.toBase58(),"dim");
+  log("  User LP ATA:      " + userLpTA.toBase58(),"dim");
+
+  // ── Instruction data (61 bytes):
+  // disc(8) + index u16(2) + base_amount u64(8) + quote_amount u64(8)
+  // + coin_creator pubkey(32) + is_mayhem_mode bool(1) + is_cashback_coin OptionBool(2 = None variant)
   var natorRaw = BigInt(Math.round(natorSeed * Math.pow(10, NATOR_DECIMALS)));
   var solRaw   = BigInt(Math.round(solSeed * 1e9));
 
-  // Build createPool instruction
-  // Anchor discriminator for PumpSwap "create_pool" on pAMMBay6...
   var discBytes = [233, 146, 209, 142, 207, 104, 64, 188];
-
-  // Instruction data: discriminator(8) + index(2) + base_amount(8) + quote_amount(8) = 26 bytes
-  var data = new Uint8Array(26);
+  var data = new Uint8Array(61);
   var dv = new DataView(data.buffer);
-  for(var i=0;i<8;i++) data[i] = discBytes[i];
-  dv.setUint16(8,  poolIndex, true);   // u16 little-endian
-  dv.setBigUint64(10, natorRaw, true); // u64 little-endian
-  dv.setBigUint64(18, solRaw,   true); // u64 little-endian
+  for(var i=0;i<8;i++) data[i] = discBytes[i];        // discriminator
+  dv.setUint16(8,  poolIndex, true);                    // index u16 LE
+  dv.setBigUint64(10, natorRaw, true);                  // base_amount_in u64 LE
+  dv.setBigUint64(18, solRaw,   true);                  // quote_amount_in u64 LE
+  var creatorBytes = WP.toBytes();
+  for(var i=0;i<32;i++) data[26+i] = creatorBytes[i];  // coin_creator pubkey
+  data[58] = 0;                                          // is_mayhem_mode = false
+  data[59] = 0;                                          // is_cashback_coin = None (option discriminant 0)
+  data[60] = 0;                                          // None padding
 
-  log("  Building create_pool instruction...","dim");
   log("  Discriminator: " + discBytes.map(b=>b.toString(16).padStart(2,'0')).join(''),"dim");
 
   var ix = new TI({
     programId: pumpProg,
     data: data,
     keys: [
-      {pubkey: poolPDA,          isSigner:false, isWritable:true},   // pool
-      {pubkey: configPDA,        isSigner:false, isWritable:false},  // global_config
-      {pubkey: baseMint,         isSigner:false, isWritable:false},  // base_mint
-      {pubkey: quoteMint,        isSigner:false, isWritable:false},  // quote_mint (WSOL)
-      {pubkey: lpMint,           isSigner:false, isWritable:true},   // lp_mint
-      {pubkey: new PK(ATA_ADDR), isSigner:false, isWritable:true},   // user_base_token_account
-      {pubkey: userLpATA,        isSigner:false, isWritable:true},   // user_lp_token_account
-      {pubkey: poolNatorATA,     isSigner:false, isWritable:true},   // pool_base_token_account
-      {pubkey: poolWsolATA,      isSigner:false, isWritable:true},   // pool_quote_token_account
-      {pubkey: WP,               isSigner:true,  isWritable:true},   // payer/creator
-      {pubkey: new PK(TOKEN_PROG),   isSigner:false, isWritable:false},  // token_program
-      {pubkey: new PK(ASSOC_PROG),   isSigner:false, isWritable:false},  // associated_token_program
-      {pubkey: SP.programId,         isSigner:false, isWritable:false},  // system_program
-      {pubkey: new PK("SysvarRent111111111111111111111111111111111"), isSigner:false, isWritable:false}, // rent
+      {pubkey: poolPDA,           isSigner:false, isWritable:true},   // 0  pool
+      {pubkey: configPDA,         isSigner:false, isWritable:false},  // 1  global_config
+      {pubkey: WP,                isSigner:true,  isWritable:true},   // 2  creator
+      {pubkey: baseMint,          isSigner:false, isWritable:false},  // 3  base_mint
+      {pubkey: quoteMint,         isSigner:false, isWritable:false},  // 4  quote_mint
+      {pubkey: lpMint,            isSigner:false, isWritable:true},   // 5  lp_mint (Token-2022)
+      {pubkey: new PK(ATA_ADDR),  isSigner:false, isWritable:true},   // 6  user_base_token_account
+      {pubkey: userQuoteTA,       isSigner:false, isWritable:true},   // 7  user_quote_token_account
+      {pubkey: userLpTA,          isSigner:false, isWritable:true},   // 8  user_pool_token_account
+      {pubkey: poolBaseTA,        isSigner:false, isWritable:true},   // 9  pool_base_token_account
+      {pubkey: poolQuoteTA,       isSigner:false, isWritable:true},   // 10 pool_quote_token_account
+      {pubkey: SP.programId,      isSigner:false, isWritable:false},  // 11 system_program
+      {pubkey: tok22,             isSigner:false, isWritable:false},  // 12 token_2022_program
+      {pubkey: tokProg,           isSigner:false, isWritable:false},  // 13 base_token_program
+      {pubkey: tokProg,           isSigner:false, isWritable:false},  // 14 quote_token_program
+      {pubkey: assocProg,         isSigner:false, isWritable:false},  // 15 associated_token_program
+      {pubkey: eventAuth,         isSigner:false, isWritable:false},  // 16 event_authority
+      {pubkey: pumpProg,          isSigner:false, isWritable:false},  // 17 program (self-CPI)
     ]
   });
 
@@ -412,10 +419,7 @@ async function doCreatePool(natorSeed, solSeed){
     log("===========================================\n","hi");
     return poolPDA.toBase58();
   } catch(e){
-    // If discriminator was wrong, log the raw error and suggest fallback
     log("\nPool creation error: " + e.message,"err");
-    log("This may indicate the instruction layout needs adjustment.","warn");
-    log("Error details logged to browser console.","warn");
     console.error("Pool creation error:", e);
     throw e;
   }
