@@ -68,9 +68,18 @@ button:disabled{border-color:#3a2800;color:#3a2800;cursor:not-allowed}
 .dd-opt:hover{border-left-color:#ffb000;color:#ffb000}
 .dd-opt.selected{color:#ffb000;border-left-color:#ff6a00}
 
-/* Quote result box */
-.quote-box{display:none;border:1px solid #00ff88;padding:14px;margin-top:16px;background:#060400}
-.quote-box.show{display:block}
+/* Quote result box — uses max-height transition so it opens/closes without layout jerk */
+.quote-box{
+  overflow:hidden;max-height:0;
+  border:0px solid #00ff88;padding:0 14px;margin-top:16px;background:#060400;
+  transition:max-height 0.28s ease,padding 0.28s ease,border-width 0.28s ease,opacity 0.2s ease;
+  opacity:0;
+}
+.quote-box.show{
+  max-height:600px;
+  border:1px solid #00ff88;padding:14px;
+  opacity:1;
+}
 .quote-title{color:#00ff88;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px}
 .qrow{display:flex;justify-content:space-between;margin:5px 0;font-size:12px;border-bottom:1px solid #1a1000;padding-bottom:4px}
 .qrow:last-child{border-bottom:none;margin-top:8px;padding-top:4px;border-top:1px solid #3a2800}
@@ -138,7 +147,9 @@ select.slip-sel option{background:#0d0900;color:#ffb000}
 .trust-loading{color:#7a5200;font-size:11px;letter-spacing:2px;animation:blink 1s step-end infinite}
 
 /* ── FEATURE 5: Liquidity Depth Signal ──────────────────────────── */
-.depth-row{display:flex;justify-content:space-between;align-items:center;margin:5px 0;font-size:12px;border-bottom:1px solid #1a1000;padding-bottom:4px}
+/* Always in flow (prevents reflow jerk), fades in when data arrives */
+.depth-row{display:flex;justify-content:space-between;align-items:center;margin:5px 0;font-size:12px;border-bottom:1px solid #1a1000;padding-bottom:4px;opacity:0;transition:opacity 0.3s ease}
+.depth-row.show{opacity:1}
 .depth-bar-wrap{display:flex;align-items:center;gap:6px;flex:1;margin-left:8px}
 .depth-bar-ascii{color:#ffb000;letter-spacing:1px;font-size:12px}
 .depth-verdict{font-size:10px;letter-spacing:1px;white-space:nowrap}
@@ -147,12 +158,20 @@ select.slip-sel option{background:#0d0900;color:#ffb000}
 .depth-verdict.thin{color:#ff6a00}
 .depth-verdict.dry{color:#ff3300}
 
-/* ── FEATURE 7: Quote Expiry Indicator ──────────────────────────── */
+/* ── FEATURE 7: Quote Expiry Indicator — max-height transition, no snap ── */
 .quote-ttl{
-  display:none;margin-top:10px;padding:8px 12px;border:1px solid #3a2800;
+  overflow:hidden;max-height:0;
+  display:flex;align-items:center;gap:10px;
+  margin-top:10px;padding:0 12px;border:1px solid transparent;
   background:#060400;font-size:11px;
+  transition:max-height 0.25s ease,padding 0.25s ease,border-color 0.25s ease,opacity 0.2s ease;
+  opacity:0;
 }
-.quote-ttl.show{display:flex;align-items:center;gap:10px}
+.quote-ttl.show{
+  max-height:60px;padding:8px 12px;
+  border-color:#3a2800;
+  opacity:1;
+}
 .ttl-label{color:#7a5200;letter-spacing:2px;white-space:nowrap}
 .ttl-bar{
   flex:1;height:4px;background:#1a0e00;position:relative;overflow:hidden;
@@ -291,8 +310,8 @@ a:hover{text-decoration:underline}
     <div class="qrow"><span class="qkey">RATE</span><span class="qval" id="qRate">--</span></div>
     <div class="qrow"><span class="qkey">PRICE IMPACT</span><span class="qval" id="qImpact">--</span></div>
     <div class="qrow"><span class="qkey">ROUTE</span><span class="qval" id="qRoute">--</span></div>
-    <!-- FEATURE 5: Depth row inside quote box -->
-    <div class="depth-row" id="depthRow" style="display:none">
+    <!-- FEATURE 5: Depth row inside quote box — always in flow, fades in -->
+    <div class="depth-row" id="depthRow">
       <span class="qkey">DEPTH</span>
       <div class="depth-bar-wrap">
         <span class="depth-bar-ascii" id="depthBarAscii">░░░░░░░░░░</span>
@@ -367,7 +386,7 @@ function clearQuote(){
   document.getElementById("bs").disabled=true;
   stopTTL();
   document.getElementById("quoteTTL").classList.remove("show");
-  document.getElementById("depthRow").style.display="none";
+  document.getElementById("depthRow").classList.remove("show");
 }
 
 // ── RPC ────────────────────────────────────────────────────────────
@@ -723,7 +742,8 @@ function startTTL(sellMint,buyMint,amt,slip){
     if(TTL_SECONDS<=0){
       stopTTL();
       document.getElementById("bs").disabled=true;
-      document.getElementById("quoteBox").style.opacity="0.4";
+      // Dim the quote box in-place — no layout shift, just opacity
+      document.getElementById("quoteBox").style.opacity="0.35";
       document.getElementById("ttlFill").style.width="0%";
       document.getElementById("ttlFill").className="ttl-bar-fill critical";
       document.getElementById("ttlSeconds").textContent="EXPIRED";
@@ -735,7 +755,7 @@ function startTTL(sellMint,buyMint,amt,slip){
         if(TTL_SELL_MINT===SELL_MINT&&TTL_BUY_MINT===BUY_MINT&&
            curAmt===TTL_AMT&&curSlip===TTL_SLIP&&WP){
           log("[AUTO-REFRESH] Re-fetching quote...","dim");
-          document.getElementById("quoteBox").style.opacity="1";
+          document.getElementById("quoteBox").style.opacity=""; // let CSS take over
           doQuote();
         }
       },1500);
@@ -790,7 +810,7 @@ function renderDepth(impact){
   var v=document.getElementById("depthVerdict");
   v.textContent="["+label+"]";
   v.className="depth-verdict "+cls;
-  document.getElementById("depthRow").style.display="flex";
+  document.getElementById("depthRow").classList.add("show");
 }
 
 // ── Quote ──────────────────────────────────────────────────────────
@@ -806,7 +826,7 @@ async function doQuote(){
   if(!buy){log("ERROR: Select a buy token.","err");return;}
 
   clearQuote();
-  document.getElementById("quoteBox").style.opacity="1";
+  document.getElementById("quoteBox").style.opacity=""; // let CSS class handle it
   document.getElementById("bq").disabled=true;
   document.getElementById("bq").textContent="FETCHING...";
   log("\n--- FETCHING QUOTE ---","info");
