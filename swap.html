@@ -787,18 +787,23 @@ function updateTTLDisplay(){
 }
 
 // ── Market Cap fetch ──────────────────────────────────────────────
-// Uses Jupiter price API + on-chain supply. Non-blocking, fires after quote.
+// Derives price entirely from Jupiter quotes — no external price API needed.
+// Strategy: quote 1 USDC → token to get tokens-per-dollar, invert for USD price.
+// Then multiply by on-chain circulating supply.
 var MCAP_CACHE={};
 async function fetchMcap(mint){
   if(MCAP_CACHE[mint]) return MCAP_CACHE[mint];
-  // 1. Get USD price from Jupiter
-  var priceUrl="https://api.jup.ag/price/v2?ids="+mint;
-  var priceRes=await fetch(priceUrl);
-  if(!priceRes.ok) return null;
-  var priceJson=await priceRes.json();
-  var price=priceJson.data&&priceJson.data[mint]&&parseFloat(priceJson.data[mint].price);
-  if(!price||price<=0) return null;
-  // 2. Get supply — reuse trust cache if already fetched, else RPC call
+
+  // 1. Quote 1 USDC → token (1 USDC = 1,000,000 raw, 6 decimals)
+  var usdcRaw=1000000; // 1 USDC
+  var probeUrl=JUP_QUOTE+"?inputMint="+USDC_MINT+"&outputMint="+mint
+    +"&amount="+usdcRaw+"&slippageBps=5000&swapMode=ExactIn";
+  var pr=await fetch(probeUrl);
+  if(!pr.ok) return null;
+  var pq=await pr.json();
+  if(pq.error||!pq.outAmount) return null;
+
+  // 2. Get token decimals + supply from on-chain
   var supply=null, dec=9;
   try{
     var info=await rpcFetch("getAccountInfo",[mint,{encoding:"jsonParsed"}]);
@@ -809,8 +814,15 @@ async function fetchMcap(mint){
     }
   }catch(e){}
   if(!supply) return null;
+
+  // 3. tokensPerDollar = outAmount / 10^dec  →  priceUSD = 1 / tokensPerDollar
+  var tokensPerDollar=parseInt(pq.outAmount)/Math.pow(10,dec);
+  if(tokensPerDollar<=0) return null;
+  var priceUSD=1/tokensPerDollar;
+
+  // 4. MC = priceUSD × circulating supply
   var supplyUI=supply/Math.pow(10,dec);
-  var mcap=price*supplyUI;
+  var mcap=priceUSD*supplyUI;
   var result=formatMcap(mcap);
   MCAP_CACHE[mint]=result;
   return result;
